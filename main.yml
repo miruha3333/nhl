@@ -1,26 +1,14 @@
-name: Hockey Parser
-on:
-  schedule:
-    - cron: "0 * * * *"
-  workflow_dispatch:
-
 jobs:
   run-parser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install playwright requests
-          playwright install-deps
           playwright install chromium
       - name: Run script
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python Sportac.py
