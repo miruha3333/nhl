@@ -71,7 +71,22 @@ async def main():
     
     msg = "--- ПОСЛЕДНИЕ 5 ПОДПИСАНИЙ ---\n" + "\n".join([format_signing(i) for i in signings[:5]])
     msg += "\n\n--- ПОСЛЕДНИЕ 5 ТРЕЙДОВ ---\n" + "\n".join([translate_trade(" ".join(t.split())) for t in trades[:5]])
-    send_to_telegram(msg)
+    def send_to_telegram(text):
+    token = os.environ.get("TG_TOKEN")
+    chat_id = os.environ.get("TG_CHAT_ID")
+    
+    print(f"DEBUG: Token starts with: {token[:5] if token else 'None'}...") # Выведет начало токена
+    print(f"DEBUG: Chat ID: {chat_id}")
+    
+    if not token or not chat_id:
+        print("Ошибка: Токены отсутствуют!")
+        return
+        
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    response = requests.post(url, data={"chat_id": chat_id, "text": text})
+    
+    print(f"DEBUG: Telegram Response Status: {response.status_code}")
+    print(f"DEBUG: Telegram Response Body: {response.text}")
 
 if __name__ == "__main__":
     asyncio.run(main())
