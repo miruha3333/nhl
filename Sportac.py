@@ -1,4 +1,3 @@
-import re
 import os
 import requests
 
@@ -14,7 +13,13 @@ TEAM_MAPPING = {
     'flames': 'CGY', 'blues': 'STL'
 }
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
+# Добавляем больше заголовков, чтобы сайт думал, что запрос идет из Chrome
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Referer": "https://puckpedia.com/",
+    "X-Requested-With": "XMLHttpRequest"
+}
 
 def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
@@ -40,15 +45,26 @@ def format_signing(item):
     return f"{name} {ctype} {term} с кэпхитом ${cap_value} {get_team_abbr(item.get('team_name'))}"
 
 def get_data():
-    # Прямые запросы к API PuckPedia
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    
+    # Сначала заходим на главную, чтобы получить cookies (часто нужно для защиты)
+    session.get("https://puckpedia.com/")
+    
     signings_url = "https://puckpedia.com/data/api_signings"
     trades_url = "https://puckpedia.com/data/api_trades"
-    
-    # Параметры запроса (стандартные для их API)
     params = {"q": '{"curPage":1,"pageSize":5}'}
     
-    signings = requests.get(signings_url, params=params, headers=HEADERS).json().get("rows", [])
-    trades_raw = requests.get(trades_url, params=params, headers=HEADERS).json().get("rows", [])
+    # Используем сессию
+    s_resp = session.get(signings_url, params=params)
+    t_resp = session.get(trades_url, params=params)
+    
+    if s_resp.status_code != 200 or t_resp.status_code != 200:
+        print(f"Ошибка доступа! Код: {s_resp.status_code}")
+        return [], []
+        
+    signings = s_resp.json().get("rows", [])
+    trades_raw = t_resp.json().get("rows", [])
     
     trades = [t.get("details_nolinks", "") for t in trades_raw]
     return signings, trades
@@ -57,6 +73,10 @@ def main():
     print("Получение данных...")
     signings, trades = get_data()
     
+    if not signings and not trades:
+        print("Данные не получены.")
+        return
+        
     msg = "--- ПОСЛЕДНИЕ 5 ПОДПИСАНИЙ ---\n" + "\n".join([format_signing(i) for i in signings])
     msg += "\n\n--- ПОСЛЕДНИЕ 5 ТРЕЙДОВ ---\n" + "\n".join(trades)
     
