@@ -20,9 +20,19 @@ TEAM_MAPPING = {
 def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
     chat_id = os.environ.get("TG_CHAT_ID")
-    if not token or not chat_id: return
+    
+    if not token or not chat_id:
+        print("Ошибка: Токены TG_TOKEN или TG_CHAT_ID не заданы в секретах!")
+        return
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, data={"chat_id": chat_id, "text": text})
+    payload = {"chat_id": chat_id, "text": text}
+    response = requests.post(url, data=payload)
+    
+    if response.status_code == 200:
+        print("Успешно отправлено в Telegram!")
+    else:
+        print(f"Ошибка отправки: {response.status_code}, {response.text}")
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def get_team_abbr(team_name_raw):
@@ -62,31 +72,22 @@ async def main():
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         page.on("response", lambda r: signings.extend(r.json()["data"]["p"]) if "api_signings" in r.url and "data" in r.json() else None)
-        await page.goto("https://puckpedia.com/signings")
+        
+        print("Загрузка данных...")
+        await page.goto("https://puckpedia.com/signings", wait_until="networkidle")
         await asyncio.sleep(10)
-        await page.goto("https://puckpedia.com/trades")
+        
+        await page.goto("https://puckpedia.com/trades", wait_until="networkidle")
         await asyncio.sleep(10)
+        
         trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
         await browser.close()
     
     msg = "--- ПОСЛЕДНИЕ 5 ПОДПИСАНИЙ ---\n" + "\n".join([format_signing(i) for i in signings[:5]])
     msg += "\n\n--- ПОСЛЕДНИЕ 5 ТРЕЙДОВ ---\n" + "\n".join([translate_trade(" ".join(t.split())) for t in trades[:5]])
-    def send_to_telegram(text):
-    token = os.environ.get("TG_TOKEN")
-    chat_id = os.environ.get("TG_CHAT_ID")
     
-    print(f"DEBUG: Token starts with: {token[:5] if token else 'None'}...") # Выведет начало токена
-    print(f"DEBUG: Chat ID: {chat_id}")
-    
-    if not token or not chat_id:
-        print("Ошибка: Токены отсутствуют!")
-        return
-        
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    response = requests.post(url, data={"chat_id": chat_id, "text": text})
-    
-    print(f"DEBUG: Telegram Response Status: {response.status_code}")
-    print(f"DEBUG: Telegram Response Body: {response.text}")
+    print("Отправка сообщения в Telegram...")
+    send_to_telegram(msg)
 
 if __name__ == "__main__":
     asyncio.run(main())
