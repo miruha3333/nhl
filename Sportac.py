@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 
 # --- КОНФИГУРАЦИЯ ---
 TEAM_MAPPING = {
@@ -13,7 +14,6 @@ TEAM_MAPPING = {
     'flames': 'CGY', 'blues': 'STL'
 }
 
-# Добавляем больше заголовков, чтобы сайт думал, что запрос идет из Chrome
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -24,9 +24,17 @@ HEADERS = {
 def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
     chat_id = os.environ.get("TG_CHAT_ID")
-    if not token or not chat_id: return
+    
+    if not token or not chat_id:
+        print("DEBUG: Ошибка - токены не найдены в окружении!")
+        return
+        
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, data={"chat_id": chat_id, "text": text})
+    payload = {"chat_id": chat_id, "text": text}
+    
+    response = requests.post(url, data=payload)
+    print(f"DEBUG: Статус отправки в ТГ: {response.status_code}")
+    print(f"DEBUG: Ответ от ТГ: {response.text}")
 
 def get_team_abbr(team_name_raw):
     if not team_name_raw: return ""
@@ -47,41 +55,44 @@ def format_signing(item):
 def get_data():
     session = requests.Session()
     session.headers.update(HEADERS)
-    
-    # Сначала заходим на главную, чтобы получить cookies (часто нужно для защиты)
     session.get("https://puckpedia.com/")
     
     signings_url = "https://puckpedia.com/data/api_signings"
     trades_url = "https://puckpedia.com/data/api_trades"
     params = {"q": '{"curPage":1,"pageSize":5}'}
     
-    # Используем сессию
     s_resp = session.get(signings_url, params=params)
     t_resp = session.get(trades_url, params=params)
     
-    if s_resp.status_code != 200 or t_resp.status_code != 200:
-        print(f"Ошибка доступа! Код: {s_resp.status_code}")
+    print(f"DEBUG: Ответ API подписаний (первые 100 симв): {s_resp.text[:100]}")
+    
+    if s_resp.status_code != 200:
+        print(f"DEBUG: Ошибка доступа к подписаниям: {s_resp.status_code}")
         return [], []
         
     signings = s_resp.json().get("rows", [])
     trades_raw = t_resp.json().get("rows", [])
-    
     trades = [t.get("details_nolinks", "") for t in trades_raw]
+    
     return signings, trades
 
 def main():
     print("Получение данных...")
     signings, trades = get_data()
     
+    print(f"DEBUG: Найдено подписаний: {len(signings)}")
+    print(f"DEBUG: Найдено трейдов: {len(trades)}")
+    
     if not signings and not trades:
-        print("Данные не получены.")
+        print("DEBUG: Данные не получены — список пуст!")
         return
         
     msg = "--- ПОСЛЕДНИЕ 5 ПОДПИСАНИЙ ---\n" + "\n".join([format_signing(i) for i in signings])
     msg += "\n\n--- ПОСЛЕДНИЕ 5 ТРЕЙДОВ ---\n" + "\n".join(trades)
     
+    print(f"DEBUG: Итоговое сообщение для ТГ:\n{msg}")
     send_to_telegram(msg)
-    print("Успешно отправлено!")
+    print("Работа скрипта завершена.")
 
 if __name__ == "__main__":
     main()
