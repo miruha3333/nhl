@@ -23,4 +23,4 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python Sportac.py
+        run: python /home/runner/work/nhl/nhl/NHL/Sportac.py'Sportac.py
