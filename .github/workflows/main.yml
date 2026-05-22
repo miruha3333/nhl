@@ -21,4 +21,4 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python имя_вашего_файла.py
+        run: python Sportac.py
