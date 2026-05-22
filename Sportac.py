@@ -70,15 +70,20 @@ async def main():
     signings, trades = [], []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        # Добавляем эмуляцию браузера для обхода защиты
+        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        page = await context.new_page()
+        
         page.on("response", lambda r: signings.extend(r.json()["data"]["p"]) if "api_signings" in r.url and "data" in r.json() else None)
         
-        print("Загрузка данных...")
-        await page.goto("https://puckpedia.com/signings", wait_until="networkidle")
-        await asyncio.sleep(10)
+        print("Переход на страницу подписаний...")
+        # Используем domcontentloaded вместо networkidle для ускорения
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(15)
         
-        await page.goto("https://puckpedia.com/trades", wait_until="networkidle")
-        await asyncio.sleep(10)
+        print("Переход на страницу трейдов...")
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(15)
         
         trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
         await browser.close()
