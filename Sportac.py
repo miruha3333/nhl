@@ -22,7 +22,6 @@ def send_to_telegram(text):
     if not token or not chat_id: return
     
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    # Разбиваем текст на части по 3500 символов, если он очень длинный
     max_len = 3500
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
@@ -50,6 +49,17 @@ def format_cap_hit(val_raw):
     try: return f"${int(val_raw):,}"
     except: return f"${val_raw}"
 
+def translate_trade(text):
+    if "forfeit" in text.lower(): return text
+    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
+    match = re.search(pattern, text)
+    if match:
+        team1, p1, team2, p2 = match.groups()
+        p1 = p1.replace(".", "").replace(" and ", " и ")
+        p2 = p2.replace(".", "").replace(" and ", " и ")
+        return f"{team1} обменяли {p2} на {p1} из {team2}"
+    return text
+
 async def main():
     extracted_signings = []
     trades = []
@@ -61,32 +71,31 @@ async def main():
         )
         page = await context.new_page()
         
-        # Перехват данных API
         async def on_response(response):
             if "api_signings" in response.url:
                 try:
                     data = await response.json()
-                    if data and "data" in data and "p" in data["data"]:
-                        extracted_signings.extend(data["data"]["p"])
+                    # Ищем данные в разных вариантах структуры
+                    if isinstance(data, dict):
+                        if "data" in data and "p" in data["data"]:
+                            extracted_signings.extend(data["data"]["p"])
+                        elif "rows" in data:
+                            extracted_signings.extend(data["rows"])
                 except: pass
         page.on("response", on_response)
         
-        # Загрузка страниц
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded")
         await asyncio.sleep(15)
         
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded")
         await asyncio.sleep(15)
         
-        # Получаем трейды и сразу фильтруем мусор
         all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
-        trades = [t for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
+        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
         await browser.close()
 
-    # --- ФОРМИРОВАНИЕ ТЕКСТА ---
-    
-    # Последние 3 подписания
+    # --- ФОРМИРОВАНИЕ ---
     s_list = []
     for item in extracted_signings[:3]:
         name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
@@ -95,7 +104,6 @@ async def main():
         line = f"• {name} {ctype} {format_years(item.get('len'))} с кэпхитом {format_cap_hit(item.get('cval'))} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
-    # Последние 3 трейда
     t_list = [f"• {t}" for t in trades[:3]]
 
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n{'Нет данных' if not s_list else chr(10).join(s_list)}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n{'Нет данных' if not t_list else chr(10).join(t_list)}"
