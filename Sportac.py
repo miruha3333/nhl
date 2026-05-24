@@ -4,8 +4,7 @@ import re
 import requests
 from playwright.async_api import async_playwright
 
-# --- НАСТРОЙКИ ---
-# Для получения аббревиатур (как было раньше)
+# --- НАСТРОЙКИ (СЛОВАРИ) ---
 TEAM_MAPPING = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
     'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN', 'islanders': 'NYI',
@@ -17,7 +16,6 @@ TEAM_MAPPING = {
     'flames': 'CGY', 'blues': 'STL'
 }
 
-# Новый словарь для перевода команд на русский
 RUS_TEAM_MAPPING = {
     'Buffalo Sabres': 'Баффало (обменяли)', 'Carolina Hurricanes': 'Каролина (обменяла)',
     'Boston Bruins': 'Бостон (обменял)', 'Columbus Blue Jackets': 'Коламбус (обменял)',
@@ -37,42 +35,62 @@ RUS_TEAM_MAPPING = {
     'Winnipeg Jets': 'Виннипег (обменял)'
 }
 
-def translate_rus_team(eng_name):
-    # Поиск ключа по частичному совпадению
-    for eng_key, rus_val in RUS_TEAM_MAPPING.items():
-        if eng_name.lower().strip() in eng_key.lower():
-            return rus_val
-    return eng_name # Если не нашли в словаре
+# --- ФУНКЦИИ ---
+def translate_rus_team(name):
+    for eng, rus in RUS_TEAM_MAPPING.items():
+        if eng.lower().split()[0] in name.lower(): return rus
+    return name
 
 def translate_trade(text):
     if "forfeit" in text.lower(): return text
-    # Регулярка захватывает: Team1, Players1, Team2, Players2
-    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
-    match = re.search(pattern, text)
+    match = re.search(r"The (.+?) acquire (.+?) from the (.+?) for (.+)", text)
     if match:
-        team1, p1, team2, p2 = match.groups()
-        
-        rus_t1 = translate_rus_team(team1)
-        rus_t2 = translate_rus_team(team2)
-        
-        p1 = p1.replace(".", "").replace(" and ", " и ")
-        p2 = p2.replace(".", "").replace(" and ", " и ")
-        
-        return f"{rus_t1} {p2} на {p1} из {team2.replace(team2, rus_t2.split('(')[0].strip())}"
+        t1, p1, t2, p2 = match.groups()
+        return f"{translate_rus_team(t1)} {p2.replace('and', 'и')} на {p1.replace('and', 'и')} из {translate_rus_team(t2).split('(')[0]}"
     return text
 
-# ... (остальные функции send_to_telegram, format_years, format_cap_hit остаются без изменений)
-
-# --- ФОРМИРОВАНИЕ ---
-# Внутри main() обновленный вывод:
-# ...
-    s_list = []
-    for item in extracted_signings[:3]:
-        # ... (логика расчета Cap Hit)
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
-        s_list.append(line)
+async def main():
+    extracted_signings = []
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
         
-    t_list = [translate_trade(t) for t in trades[:3]]
+        # Подписания
+        await page.goto("https://puckpedia.com/signings")
+        await page.wait_for_selector("tr[key]", timeout=15000)
+        extracted_signings = await page.evaluate('''() => Array.from(document.querySelectorAll('tr[key]')).slice(0, 3).map(tr => ({
+            name: tr.querySelector('.pp_link span')?.innerText || '',
+            team: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
+            cap: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
+            len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
+            lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
+        }))''')
+        
+        # Трейды
+        await page.goto("https://puckpedia.com/trades")
+        await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
+        trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
+        await browser.close()
 
-    # Финальный вывод с пустой строкой и без точек
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join(s_list)}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join(t_list)}"
+    # --- ФОРМИРОВАНИЕ ТЕКСТА ---
+    s_list = []
+    for s in extracted_signings:
+        total = int(s['cap'])
+        years = int(s['len'])
+        cap_val = f"${(total // years):,}" if "ELC" in s['lvl'].upper() else f"${total:,}"
+        ctype = "подписал контракт новичка" if "ELC" in s['lvl'].upper() else "подписал контракт"
+        s_list.append(f"{s['name']} {ctype} на {s['len']} лет с кэпхитом {cap_val} ({s['team'][:3].upper()})")
+        
+    t_list = [translate_trade(t) for t in trades if "The ID" not in t and len(t) > 20][:3]
+
+    msg = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
+    
+    # Отправка
+    token = os.environ.get("TG_TOKEN")
+    chat_id = os.environ.get("TG_CHAT_ID")
+    if token and chat_id:
+        requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={"chat_id": chat_id, "text": msg})
+
+if __name__ == "__main__":
+    asyncio.run(main())
