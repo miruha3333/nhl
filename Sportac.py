@@ -38,8 +38,7 @@ def get_team_abbr(team_name_raw):
     return f"({name[:3].upper()})"
 
 def format_years(years_raw):
-    try:
-        years = int(years_raw)
+    try: years = int(years_raw)
     except: return "на срок"
     if years == 1: return "на 1 год"
     elif 2 <= years <= 4: return f"на {years} года"
@@ -66,9 +65,7 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-        )
+        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
         page = await context.new_page()
         
         async def on_response(response):
@@ -76,29 +73,25 @@ async def main():
                 try:
                     data = await response.json()
                     if isinstance(data, dict):
-                        if "data" in data and "p" in data["data"]:
-                            extracted_signings.extend(data["data"]["p"])
-                        elif "rows" in data:
-                            extracted_signings.extend(data["rows"])
+                        if "data" in data and "p" in data["data"]: extracted_signings.extend(data["data"]["p"])
+                        elif "rows" in data: extracted_signings.extend(data["rows"])
                 except: pass
         page.on("response", on_response)
         
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded")
         await asyncio.sleep(15)
 
-        # ДОБАВЛЕННЫЙ БЛОК: если API пустое, парсим DOM по твоим селекторам
+        # Резервный парсинг, если API пустое
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
-                const rows = Array.from(document.querySelectorAll('tr[key]'));
-                return rows.slice(0, 3).map(tr => {
-                    return {
-                        p_fn: tr.querySelector('.pp_link span')?.innerText || '',
-                        team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
-                        cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText || '',
-                        len: tr.querySelector('td:has([class*="len"])')?.innerText || '',
-                        lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
-                    };
-                });
+                return Array.from(document.querySelectorAll('tr[key]')).slice(0, 3).map(tr => ({
+                    p_fn: tr.querySelector('.pp_link span')?.innerText.split(' ')[0] || '',
+                    p_ln: tr.querySelector('.pp_link span')?.innerText.split(' ')[1] || '',
+                    team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
+                    cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
+                    len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
+                    lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
+                }));
             }''')
         
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded")
@@ -112,23 +105,21 @@ async def main():
     # --- ФОРМИРОВАНИЕ ---
     s_list = []
     for item in extracted_signings[:3]:
-        # Поддержка обоих вариантов (API или DOM)
         name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
-        if not name or name == " ": name = item.get('p_fn', '') # Если данные из DOM
-        
         lvl = str(item.get("lvl", "")).upper()
+        
+        # Логика расчета: если контракт ELC, делим общую сумму на количество лет
+        total_val = float(item.get('cval', 0) or 0)
+        years = int(item.get('len') or 1)
+        cap_val = total_val / years if "ELC" in lvl else total_val
+        
         ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-        
-        team = item.get('team_name', '')
-        cap = item.get('cval', '')
-        length = item.get('len', '')
-        
-        line = f"• {name} {ctype} {format_years(length)} с кэпхитом {format_cap_hit(cap)} {get_team_abbr(team)}"
+        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
-    t_list = [f"• {t}" for t in trades[:3]]
+    t_list = trades[:3]
 
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n{'Нет данных' if not s_list else chr(10).join(s_list)}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n{'Нет данных' if not t_list else chr(10).join(t_list)}"
+    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     
     send_to_telegram(message)
 
