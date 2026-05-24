@@ -71,27 +71,36 @@ async def main():
         )
         page = await context.new_page()
         
+        # 1. API для подписаний
         async def on_response(response):
             if "api_signings" in response.url:
                 try:
                     data = await response.json()
-                    # Ищем данные везде, где они могут быть
                     if isinstance(data, dict):
-                        # Твой список полей: p_fn, p_ln, sign_city, cap_hit, len, lvl
-                        # Собираем все, что приходит
-                        if "rows" in data:
-                            extracted_signings.extend(data["rows"])
-                        elif "data" in data and "p" in data["data"]:
-                            extracted_signings.extend(data["data"]["p"])
+                        if "rows" in data: extracted_signings.extend(data["rows"])
+                        elif "data" in data and "p" in data["data"]: extracted_signings.extend(data["data"]["p"])
                 except: pass
         page.on("response", on_response)
         
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded")
-        await asyncio.sleep(15)
+        await asyncio.sleep(10)
+
+        # 2. Если API вернуло пустоту, парсим через твои селекторы DOM
+        if not extracted_signings:
+            extracted_signings = await page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('tr[key]')).slice(0, 3).map(tr => {
+                    const name = tr.querySelector('.pp_link span')?.innerText || '';
+                    const team = tr.querySelector('td:has([class*="sign_city"])')?.innerText || '';
+                    const cap = tr.querySelector('td:has([class*="cap_hit"])')?.innerText || '0';
+                    const len = tr.querySelector('td:has([class*="len"])')?.innerText || '0';
+                    const lvl = tr.querySelector('td:has([class*="lvl"])')?.innerText || '';
+                    return { p_fn: name, team_name: team, cval: cap, len: len, lvl: lvl };
+                });
+            }""")
         
+        # 3. Парсинг трейдов
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded")
-        await asyncio.sleep(15)
-        
+        await asyncio.sleep(10)
         all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
@@ -100,24 +109,19 @@ async def main():
     # --- ФОРМИРОВАНИЕ ---
     s_list = []
     for item in extracted_signings[:3]:
-        # Пытаемся взять данные из разных возможных ключей (включая те, что ты подсказал)
-        fn = item.get('p_fn') or item.get('first_name') or ''
-        ln = item.get('p_ln') or item.get('last_name') or ''
-        name = f"{fn} {ln}".strip()
-        
-        team = item.get('team_name') or item.get('sign_city') or ''
-        cap = item.get('cval') or item.get('cap_hit') or '0'
-        length = item.get('len') or '0'
+        name = item.get('p_fn', '') or item.get('first_name', '')
+        team = item.get('team_name', '') or item.get('sign_city', '')
+        cap = item.get('cval', '') or item.get('cap_hit', '')
+        length = item.get('len', '')
         lvl = str(item.get('lvl', '')).upper()
         
         ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-        line = f"• {name} {ctype} {format_years(length)} с кэпхитом {format_cap_hit(cap)} {get_team_abbr(team)}"
+        line = f"• {name.strip()} {ctype} {format_years(length)} с кэпхитом {format_cap_hit(cap)} {get_team_abbr(team)}"
         s_list.append(line)
         
     t_list = [f"• {t}" for t in trades[:3]]
 
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n{'Нет данных' if not s_list else chr(10).join(s_list)}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n{'Нет данных' if not t_list else chr(10).join(t_list)}"
-    
     send_to_telegram(message)
 
 if __name__ == "__main__":
