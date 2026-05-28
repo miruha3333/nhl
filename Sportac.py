@@ -17,30 +17,46 @@ TEAM_MAPPING = {
 }
 
 RUS_TEAM_MAPPING = {
-    'Buffalo Sabres': 'Баффало обменяли', 'Carolina Hurricanes': 'Каролина обменяла',
-    'Boston Bruins': 'Бостон обменял', 'Columbus Blue Jackets': 'Коламбус обменял',
-    'Detroit Red Wings': 'Детройт обменял', 'New Jersey Devils': 'Нью-Джерси обменяли',
-    'Montreal Canadiens': 'Монреаль обменял', 'New York Islanders': 'Айлендерс обменял',
-    'Ottawa Senators': 'Оттава обменяла', 'New York Rangers': 'Рейнджерс обменяли',
-    'Tampa Bay Lightning': 'Тампа обменяла', 'Philadelphia Flyers': 'Филадельфия обменяла',
-    'Toronto Maple Leafs': 'Торонто обменяло', 'Pittsburgh Penguins': 'Питтсбург обменял',
-    'Florida Panthers': 'Флорида обменяла', 'Washington Capitals': 'Вашингтон обменял',
-    'Chicago Blackhawks': 'Чикаго обменяло', 'Anaheim Ducks': 'Анахайм обменял',
-    'Colorado Avalanche': 'Колорадо обменяло', 'Calgary Flames': 'Калгари обменяли',
-    'Dallas Stars': 'Даллас обменял', 'Edmonton Oilers': 'Эдмонтон обменял',
-    'Minnesota Wild': 'Миннесота обменяла', 'Los Angeles Kings': 'Лос-Анджелес обменял',
-    'Nashville Predators': 'Нэшвилл обменял', 'San Jose Sharks': 'Сан-Хосе обменяло',
-    'St. Louis Blues': 'Сент-Луис обменял', 'Seattle Kraken': 'Сиэттл обменял',
-    'Utah Mammoth': 'Юта обменяла', 'Vancouver Canucks': 'Ванкувер обменял',
-    'Winnipeg Jets': 'Виннипег обменял'
+    'Buffalo Sabres': {'main': 'Баффало обменяли', 'from': 'из Баффало'},
+    'Carolina Hurricanes': {'main': 'Каролина обменяла', 'from': 'из Каролины'},
+    'Boston Bruins': {'main': 'Бостон обменял', 'from': 'из Бостона'},
+    'Columbus Blue Jackets': {'main': 'Коламбус обменял', 'from': 'из Коламбуса'},
+    'Detroit Red Wings': {'main': 'Детройт обменял', 'from': 'из Детройта'},
+    'New Jersey Devils': {'main': 'Нью-Джерси обменяли', 'from': 'из Нью-Джерси'},
+    'Montreal Canadiens': {'main': 'Монреаль обменял', 'from': 'из Монреаля'},
+    'New York Islanders': {'main': 'Айлендерс обменял', 'from': 'из Айлендерс'},
+    'Ottawa Senators': {'main': 'Оттава обменяла', 'from': 'из Оттавы'},
+    'New York Rangers': {'main': 'Рейнджерс обменяли', 'from': 'из Рейнджерс'},
+    'Tampa Bay Lightning': {'main': 'Тампа обменяла', 'from': 'из Тампы'},
+    'Philadelphia Flyers': {'main': 'Филадельфия обменяла', 'from': 'из Филадельфии'},
+    'Toronto Maple Leafs': {'main': 'Торонто обменяло', 'from': 'из Торонто'},
+    'Pittsburgh Penguins': {'main': 'Питтсбург обменял', 'from': 'из Питтсбурга'},
+    'Florida Panthers': {'main': 'Флорида обменяла', 'from': 'из Флориды'},
+    'Washington Capitals': {'main': 'Вашингтон обменял', 'from': 'из Вашингтона'},
+    'Chicago Blackhawks': {'main': 'Чикаго обменяло', 'from': 'из Чикаго'},
+    'Anaheim Ducks': {'main': 'Анахайм обменял', 'from': 'из Анахайма'},
+    'Colorado Avalanche': {'main': 'Колорадо обменяло', 'from': 'из Колорадо'},
+    'Calgary Flames': {'main': 'Калгари обменяли', 'from': 'из Калгари'},
+    'Dallas Stars': {'main': 'Даллас обменял', 'from': 'из Далласа'},
+    'Edmonton Oilers': {'main': 'Эдмонтон обменял', 'from': 'из Эдмонтона'},
+    'Minnesota Wild': {'main': 'Миннесота обменяла', 'from': 'из Миннесоты'},
+    'Los Angeles Kings': {'main': 'Лос-Анджелес обменял', 'from': 'из Лос-Анджелеса'},
+    'Nashville Predators': {'main': 'Нэшвилл обменял', 'from': 'из Нэшвилла'},
+    'San Jose Sharks': {'main': 'Сан-Хосе обменяло', 'from': 'из Сан-Хосе'},
+    'St. Louis Blues': {'main': 'Сент-Луис обменял', 'from': 'из Сент-Луиса'},
+    'Seattle Kraken': {'main': 'Сиэттл обменял', 'from': 'из Сиэттла'},
+    'Utah Mammoth': {'main': 'Юта обменяла', 'from': 'из Юты'},
+    'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
+    'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
 }
 
-def get_rus_team(eng_name):
+def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
     for key, value in RUS_TEAM_MAPPING.items():
         if clean_name.lower() in key.lower():
             return value
-    return clean_name
+    # Возвращаем дефолтные значения на случай, если клуба нет в словаре
+    return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
 
 def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
@@ -80,11 +96,13 @@ def translate_trade(text):
     match = re.search(pattern, text)
     if match:
         team1, p1, team2, p2 = match.groups()
-        rus_team1 = get_rus_team(team1)
-        rus_team2 = get_rus_team(team2).split(' (')[0] # Берем только название без глагола для второй части
+        rus_team1_data = get_rus_team_data(team1)
+        rus_team2_data = get_rus_team_data(team2)
+        
         p1 = p1.replace(".", "").replace(" and ", " и ")
         p2 = p2.replace(".", "").replace(" and ", " и ")
-        return f"{rus_team1} {p2} на {p1} из {rus_team2}"
+        
+        return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
     return text
 
 async def main():
