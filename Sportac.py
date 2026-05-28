@@ -216,8 +216,8 @@ async def main():
         return # Выходим из функции, ничего не посылая в Телеграм
     
     # Если данные новые — формируем и отправляем сообщение
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) as s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
-    
+    # Стало: [s + chr(10) for s in s_list]
+    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"    
     send_to_telegram(message)
     
     # Сохраняем новые данные в кэш, чтобы не слать их в следующий раз
