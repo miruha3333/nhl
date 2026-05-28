@@ -43,7 +43,7 @@ RUS_TEAM_MAPPING = {
     'Los Angeles Kings': {'main': 'Лос-Анджелес обменял', 'from': 'из Лос-Анджелеса'},
     'Nashville Predators': {'main': 'Нэшвилл обменял', 'from': 'из Нэшвилла'},
     'San Jose Sharks': {'main': 'Сан-Хосе обменяло', 'from': 'из Сан-Хосе'},
-    'St. Louis Blues': {'main': 'Сент-Лоис обменял', 'from': 'из Сент-Луиса'},
+    'St. Louis Blues': {'main': 'Сент-Луис обменял', 'from': 'из Сент-Луиса'},
     'Seattle Kraken': {'main': 'Сиэттл обменял', 'from': 'из Сиэттла'},
     'Utah Mammoth': {'main': 'Юта обменяла', 'from': 'из Юты'},
     'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
@@ -123,13 +123,18 @@ async def main():
                 except: pass
         page.on("response", on_response)
         
-        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded")
-        await asyncio.sleep(15)
+        # --- СБОР ПОДПИСАНИЙ ---
+        try:
+            # Используем networkidle для полной загрузки всех API-скриптов Vue
+            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
+            # Ждем появления строки таблицы с твоим Vue-атрибутом :key
+            await page.wait_for_selector('table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]', timeout=15000)
+        except Exception as e:
+            print(f"Предупреждение по подписаниям (возможно блокировка): {e}")
 
-        # ИСПРАВЛЕНО: Безопасный поиск Vue-атрибута :key="x.cid" внутри нужной таблицы
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
-                const selector = 'table.pp_table2.stickycol.sortDesc tbody tr[\\\\:key="x.cid"]';
+                const selector = 'table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]';
                 return Array.from(document.querySelectorAll(selector)).slice(0, 3).map(tr => ({
                     p_fn: tr.querySelector('.pp_link span')?.innerText.split(' ')[0] || '',
                     p_ln: tr.querySelector('.pp_link span')?.innerText.split(' ')[1] || '',
@@ -140,8 +145,13 @@ async def main():
                 }));
             }''')
         
-        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded")
-        await asyncio.sleep(15)
+        # --- СБОР ТРЕЙДОВ ---
+        try:
+            await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=45000)
+            # Ждем появления элементов с деталями трейдов
+            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
+        except Exception as e:
+            print(f"Предупреждение по трейдам (возможно блокировка): {e}")
         
         all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
