@@ -126,16 +126,22 @@ async def main():
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded")
         await asyncio.sleep(15)
 
+        # ОБНОВЛЕННЫЙ РЕЗЕРВНЫЙ ПАРСИНГ: ищет любые строки tbody в таблице подписаний, не полагаясь на tr[key]
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
-                return Array.from(document.querySelectorAll('tr[key]')).slice(0, 3).map(tr => ({
-                    p_fn: tr.querySelector('.pp_link span')?.innerText.split(' ')[0] || '',
-                    p_ln: tr.querySelector('.pp_link span')?.innerText.split(' ')[1] || '',
-                    team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
-                    cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
-                    len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
-                    lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
-                }));
+                const rows = Array.from(document.querySelectorAll('table tbody tr'));
+                return rows.filter(tr => tr.querySelector('.pp_link')).slice(0, 5).map(tr => {
+                    const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('.pp_link')?.innerText || '';
+                    const nameParts = nameText.trim().split(' ');
+                    return {
+                        p_fn: nameParts[0] || '',
+                        p_ln: nameParts.slice(1).join(' ') || '',
+                        team_name: tr.querySelector('td:nth-child(2)')?.innerText || '',
+                        cval: tr.querySelector('td:nth-child(3)')?.innerText.replace(/[^0-9]/g, '') || '0',
+                        len: tr.querySelector('td:nth-child(4)')?.innerText.replace(/[^0-9]/g, '') || '1',
+                        lvl: tr.querySelector('td:nth-child(5)')?.innerText || ''
+                    };
+                });
             }''')
         
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded")
