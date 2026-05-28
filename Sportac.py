@@ -43,7 +43,7 @@ RUS_TEAM_MAPPING = {
     'Los Angeles Kings': {'main': 'Лос-Анджелес обменял', 'from': 'из Лос-Анджелеса'},
     'Nashville Predators': {'main': 'Нэшвилл обменял', 'from': 'из Нэшвилла'},
     'San Jose Sharks': {'main': 'Сан-Хосе обменяло', 'from': 'из Сан-Хосе'},
-    'St. Louis Blues': {'main': 'Сент-Луис обменял', 'from': 'из Сент-Луиса'},
+    'St. Louis Blues': {'main': 'Сент-Лоис обменял', 'from': 'из Сент-Луиса'},
     'Seattle Kraken': {'main': 'Сиэттл обменял', 'from': 'из Сиэттла'},
     'Utah Mammoth': {'main': 'Юта обменяла', 'from': 'из Юты'},
     'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
@@ -126,10 +126,10 @@ async def main():
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded")
         await asyncio.sleep(15)
 
-        # РЕЗЕРВНЫЙ ПАРСИНГ: Используем точный селектор по твоей подсказке
+        # ИСПРАВЛЕНО: Безопасный поиск Vue-атрибута :key="x.cid" внутри нужной таблицы
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
-                const selector = 'table.pp_table2.stickycol.sortDesc tbody tr[\\\\:key]';
+                const selector = 'table.pp_table2.stickycol.sortDesc tbody tr[\\\\:key="x.cid"]';
                 return Array.from(document.querySelectorAll(selector)).slice(0, 3).map(tr => ({
                     p_fn: tr.querySelector('.pp_link span')?.innerText.split(' ')[0] || '',
                     p_ln: tr.querySelector('.pp_link span')?.innerText.split(' ')[1] || '',
