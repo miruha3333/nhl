@@ -17,22 +17,22 @@ TEAM_MAPPING = {
 }
 
 RUS_TEAM_MAPPING = {
-    'Buffalo Sabres': 'Баффало (обменяли)', 'Carolina Hurricanes': 'Каролина (обменяла)',
-    'Boston Bruins': 'Бостон (обменял)', 'Columbus Blue Jackets': 'Коламбус (обменял)',
-    'Detroit Red Wings': 'Детройт (обменял)', 'New Jersey Devils': 'Нью-Джерси (обменяли)',
-    'Montreal Canadiens': 'Монреаль (обменял)', 'New York Islanders': 'Айлендерс (обменял)',
-    'Ottawa Senators': 'Оттава (обменяла)', 'New York Rangers': 'Рейнджерс (обменяли)',
-    'Tampa Bay Lightning': 'Тампа (обменяла)', 'Philadelphia Flyers': 'Филадельфия (обменяла)',
-    'Toronto Maple Leafs': 'Торонто (обменяло)', 'Pittsburgh Penguins': 'Питтсбург (обменял)',
-    'Florida Panthers': 'Флорида (обменяла)', 'Washington Capitals': 'Вашингтон (обменял)',
-    'Chicago Blackhawks': 'Чикаго (обменяло)', 'Anaheim Ducks': 'Анахайм (обменял)',
-    'Colorado Avalanche': 'Колорадо (обменяло)', 'Calgary Flames': 'Калгари (обменяли)',
-    'Dallas Stars': 'Даллас (обменял)', 'Edmonton Oilers': 'Эдмонтон (обменял)',
-    'Minnesota Wild': 'Миннесота (обменяла)', 'Los Angeles Kings': 'Лос-Анджелес (обменял)',
-    'Nashville Predators': 'Нэшвилл (обменял)', 'San Jose Sharks': 'Сан-Хосе (обменяло)',
-    'St. Louis Blues': 'Сент-Луис (обменял)', 'Seattle Kraken': 'Сиэттл (обменял)',
-    'Utah Mammoth': 'Юта (обменяла)', 'Vancouver Canucks': 'Ванкувер (обменял)',
-    'Winnipeg Jets': 'Виннипег (обменял)'
+    'Buffalo Sabres': 'Баффало обменяли', 'Carolina Hurricanes': 'Каролина обменяла',
+    'Boston Bruins': 'Бостон обменял', 'Columbus Blue Jackets': 'Коламбус обменял',
+    'Detroit Red Wings': 'Детройт обменял', 'New Jersey Devils': 'Нью-Джерси обменяли',
+    'Montreal Canadiens': 'Монреаль обменял', 'New York Islanders': 'Айлендерс обменял',
+    'Ottawa Senators': 'Оттава обменяла', 'New York Rangers': 'Рейнджерс обменяли',
+    'Tampa Bay Lightning': 'Тампа обменяла', 'Philadelphia Flyers': 'Филадельфия обменяла',
+    'Toronto Maple Leafs': 'Торонто обменяло', 'Pittsburgh Penguins': 'Питтсбург обменял',
+    'Florida Panthers': 'Флорида обменяла', 'Washington Capitals': 'Вашингтон обменял',
+    'Chicago Blackhawks': 'Чикаго обменяло', 'Anaheim Ducks': 'Анахайм обменял',
+    'Colorado Avalanche': 'Колорадо обменяло', 'Calgary Flames': 'Калгари обменяли',
+    'Dallas Stars': 'Даллас обменял', 'Edmonton Oilers': 'Эдмонтон обменял',
+    'Minnesota Wild': 'Миннесота обменяла', 'Los Angeles Kings': 'Лос-Анджелес обменял',
+    'Nashville Predators': 'Нэшвилл обменял', 'San Jose Sharks': 'Сан-Хосе обменяло',
+    'St. Louis Blues': 'Сент-Луис обменял', 'Seattle Kraken': 'Сиэттл обменял',
+    'Utah Mammoth': 'Юта обменяла', 'Vancouver Canucks': 'Ванкувер обменял',
+    'Winnipeg Jets': 'Виннипег обменял'
 }
 
 def get_rus_team(eng_name):
