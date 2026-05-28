@@ -1,14 +1,40 @@
+name: Run Hockey Parser
+
+on:
+  # Запуск по расписанию (например, каждый час). Можете настроить под себя.
+  schedule:
+    - cron: '0 * * * *'
+  # Позволяет запускать парсер вручную кнопкой из вкладки Actions в GitHub
+  workflow_dispatch:
+
 jobs:
-  run-parser:
+  parse:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install dependencies
+          # Кэширование зависимостей ускоряет последующие запуски
+          cache: 'pip'
+
+      - name: Install Python dependencies
         run: |
-          pip install playwright requests
-          playwright install chromium
-      - name: Run script
+          python -m pip install --upgrade pip
+          pip install requests playwright
+
+      - name: Install Playwright Chromium Browser
+        run: playwright install chromium
+
+      - name: Install Playwright Linux Dependencies
+        run: playwright install-deps chromium
+
+      - name: Run parser script
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python Sportac.py
