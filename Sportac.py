@@ -139,7 +139,7 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        # Маскировка контекста для снижения подозрений у Cloudflare
+        # Маскировка контекста под реального пользователя
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             locale="en-US",
@@ -164,7 +164,7 @@ async def main():
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Безопасный селектор tr без использования двоеточий
+        # Безопасный селектор tr (без двоеточий)
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
                 const rows = Array.from(document.querySelectorAll('table.pp_table2.stickycol.sortDesc tbody tr'));
@@ -194,6 +194,12 @@ async def main():
         
         await browser.close()
 
+    # --- ЗАЩИТА ОТ ПУСТЫХ ДАННЫХ ---
+    # Если сайт выдал пустоту из-за блокировки Cloudflare, завершаем работу, чтобы не слать пустой пост
+    if not extracted_signings and not trades:
+        print("Внимание: Не удалось получить данные с сайта (возможно, блокировка Cloudflare). Отмена операции.")
+        return
+
     # --- ФОРМИРОВАНИЕ ---
     s_list = []
     current_signature_elements = []
@@ -214,7 +220,7 @@ async def main():
     for t in t_list:
         current_signature_elements.append(t[:50])
 
-    # Сравнение с кэшем
+    # Сравнение отпечатка с кэшем
     current_signature = "|".join(current_signature_elements)
     last_cached_signature = get_last_cached_signature()
 
@@ -222,7 +228,7 @@ async def main():
         print("Новых подписаний и трейдов нет. Отмена отправки.")
         return
     
-    # Исправлена опечатка 'as' -> 'for' в f-строке
+    # Сборка финального сообщения
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     
     send_to_telegram(message)
