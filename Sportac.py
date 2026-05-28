@@ -55,7 +55,6 @@ def get_rus_team_data(eng_name):
     for key, value in RUS_TEAM_MAPPING.items():
         if clean_name.lower() in key.lower():
             return value
-    # Возвращаем дефолтные значения на случай, если клуба нет в словаре
     return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
 
 def send_to_telegram(text):
