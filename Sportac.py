@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import requests
+import subprocess
 from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
@@ -49,6 +50,35 @@ RUS_TEAM_MAPPING = {
     'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
     'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
 }
+
+CACHE_FILE = "last_data_cache.txt"
+
+def get_last_cached_signature():
+    """Читает сохраненный отпечаток прошлого поста из файла."""
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
+
+def save_to_cache_and_commit(new_signature):
+    """Сохраняет новый отпечаток в файл и пушит его в репозиторий GitHub."""
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        f.write(new_signature)
+    
+    # Автоматический коммит файла кэша обратно в репозиторий (работает в GitHub Actions)
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+            subprocess.run(["git", "add", CACHE_FILE], check=True)
+            # Если изменений нет, git commit вернет ошибку, поэтому проверяем статус
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            if status.stdout.strip():
+                subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
+                subprocess.run(["git", "push"], check=True)
+                print("Кэш успешно сохранен в репозиторий.")
+        except Exception as e:
+            print(f"Не удалось сохранить кэш в Git: {e}")
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -125,12 +155,10 @@ async def main():
         
         # --- СБОР ПОДПИСАНИЙ ---
         try:
-            # Используем networkidle для полной загрузки всех API-скриптов Vue
             await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
-            # Ждем появления строки таблицы с твоим Vue-атрибутом :key
             await page.wait_for_selector('table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]', timeout=15000)
         except Exception as e:
-            print(f"Предупреждение по подписаниям (возможно блокировка): {e}")
+            print(f"Предупреждение по подписаниям: {e}")
 
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
@@ -148,10 +176,9 @@ async def main():
         # --- СБОР ТРЕЙДОВ ---
         try:
             await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=45000)
-            # Ждем появления элементов с деталями трейдов
             await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
         except Exception as e:
-            print(f"Предупреждение по трейдам (возможно блокировка): {e}")
+            print(f"Предупреждение по трейдам: {e}")
         
         all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
@@ -160,8 +187,13 @@ async def main():
 
     # --- ФОРМИРОВАНИЕ ---
     s_list = []
+    # Создаем уникальный "отпечаток" из имен первых элементов, чтобы сравнивать с кэшем
+    current_signature_elements = []
+
     for item in extracted_signings[:3]:
         name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
+        current_signature_elements.append(name) # Добавляем имя для отпечатка
+        
         lvl = str(item.get("lvl", "")).upper()
         total_val = float(item.get('cval', 0) or 0)
         years = int(item.get('len') or 1)
@@ -171,10 +203,25 @@ async def main():
         s_list.append(line)
         
     t_list = trades[:3]
+    for t in t_list:
+        current_signature_elements.append(t[:50]) # Добавляем кусочек трейда для отпечатка
 
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
+    # Объединяем всё в одну уникальную строку-отпечаток
+    current_signature = "|".join(current_signature_elements)
+    last_cached_signature = get_last_cached_signature()
+
+    # --- ПРОВЕРКА НА НОВИЗНУ ---
+    if current_signature == last_cached_signature:
+        print("Новых подписаний и трейдов нет. Отмена отправки.")
+        return # Выходим из функции, ничего не посылая в Телеграм
+    
+    # Если данные новые — формируем и отправляем сообщение
+    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) as s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     
     send_to_telegram(message)
+    
+    # Сохраняем новые данные в кэш, чтобы не слать их в следующий раз
+    save_to_cache_and_commit(current_signature)
 
 if __name__ == "__main__":
     asyncio.run(main())
