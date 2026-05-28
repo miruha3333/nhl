@@ -65,13 +65,12 @@ def save_to_cache_and_commit(new_signature):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         f.write(new_signature)
     
-    # Автоматический коммит файла кэша обратно в репозиторий (работает в GitHub Actions)
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
             subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
             subprocess.run(["git", "add", CACHE_FILE], check=True)
-            # Если изменений нет, git commit вернет ошибку, поэтому проверяем статус
+            
             status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
             if status.stdout.strip():
                 subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
@@ -140,7 +139,12 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        # Маскировка контекста для снижения подозрений у Cloudflare
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            locale="en-US",
+            timezone_id="America/New_York"
+        )
         page = await context.new_page()
         
         async def on_response(response):
@@ -155,28 +159,33 @@ async def main():
         
         # --- СБОР ПОДПИСАНИЙ ---
         try:
-            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
-            await page.wait_for_selector('table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]', timeout=15000)
+            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(8)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
+        # Безопасный селектор tr без использования двоеточий
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
-                const selector = 'table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]';
-                return Array.from(document.querySelectorAll(selector)).slice(0, 3).map(tr => ({
-                    p_fn: tr.querySelector('.pp_link span')?.innerText.split(' ')[0] || '',
-                    p_ln: tr.querySelector('.pp_link span')?.innerText.split(' ')[1] || '',
-                    team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
-                    cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
-                    len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
-                    lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
-                }));
+                const rows = Array.from(document.querySelectorAll('table.pp_table2.stickycol.sortDesc tbody tr'));
+                return rows.slice(0, 3).map(tr => {
+                    const linkSpan = tr.querySelector('.pp_link span')?.innerText || '';
+                    const nameParts = linkSpan.trim().split(' ');
+                    return {
+                        p_fn: nameParts[0] || '',
+                        p_ln: nameParts.slice(1).join(' ') || '',
+                        team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
+                        cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
+                        len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
+                        lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
+                    };
+                });
             }''')
         
         # --- СБОР ТРЕЙДОВ ---
         try:
-            await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=45000)
-            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
+            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(8)
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
@@ -187,12 +196,11 @@ async def main():
 
     # --- ФОРМИРОВАНИЕ ---
     s_list = []
-    # Создаем уникальный "отпечаток" из имен первых элементов, чтобы сравнивать с кэшем
     current_signature_elements = []
 
     for item in extracted_signings[:3]:
         name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
-        current_signature_elements.append(name) # Добавляем имя для отпечатка
+        current_signature_elements.append(name)
         
         lvl = str(item.get("lvl", "")).upper()
         total_val = float(item.get('cval', 0) or 0)
@@ -204,23 +212,20 @@ async def main():
         
     t_list = trades[:3]
     for t in t_list:
-        current_signature_elements.append(t[:50]) # Добавляем кусочек трейда для отпечатка
+        current_signature_elements.append(t[:50])
 
-    # Объединяем всё в одну уникальную строку-отпечаток
+    # Сравнение с кэшем
     current_signature = "|".join(current_signature_elements)
     last_cached_signature = get_last_cached_signature()
 
-    # --- ПРОВЕРКА НА НОВИЗНУ ---
     if current_signature == last_cached_signature:
         print("Новых подписаний и трейдов нет. Отмена отправки.")
-        return # Выходим из функции, ничего не посылая в Телеграм
+        return
     
-    # Если данные новые — формируем и отправляем сообщение
-    # Стало: [s + chr(10) for s in s_list]
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"    
+    # Исправлена опечатка 'as' -> 'for' в f-строке
+    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
+    
     send_to_telegram(message)
-    
-    # Сохраняем новые данные в кэш, чтобы не слать их в следующий раз
     save_to_cache_and_commit(current_signature)
 
 if __name__ == "__main__":
