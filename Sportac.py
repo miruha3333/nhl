@@ -1,11 +1,5 @@
 import asyncio
-import os
-import re
-import subprocess
-import requests
 from playwright.async_api import async_playwright
-
-CACHE_FILE = "last_data_cache.txt"
 
 async def main():
     async with async_playwright() as p:
@@ -18,57 +12,59 @@ async def main():
         # --- ДИАГНОСТИКА ПОДПИСАНИЙ ---
         print("=== ДИАГНОСТИКА ПОДПИСАНИЙ ===")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        
-        # Ждём дольше — даём Alpine.js время отрендерить данные
         await asyncio.sleep(8)
 
         diag_signings = await page.evaluate('''() => {
             const report = [];
 
-            // Проверяем наличие ключевых селекторов
             const checks = [
-                'div.font-bold.font-sans.text-lg',
-                'div.font-bold.font-sans.text-lg a.pp_link',
-                'a.pl-2.text-pp-copy_dk',
-                'a.pl-2.text-pp-copy_dk span',
+                'div.font-bold',
                 'a.pp_link',
-                'tr[\\:key="x.cid"]',
+                'a[href*="/player/"]',
+                'a[href*="/team/"]',
+                'a.pl-2',
                 'div[x-data]',
-                'div.flex-1.mt-3'
+                'span[x-text]',
+                '[x-text]',
+                '[x-html]',
+                'div.flex-1'
             ];
 
             for (const sel of checks) {
-                const els = document.querySelectorAll(sel);
-                report.push(`${sel}: найдено ${els.length} элементов`);
-                if (els.length > 0 && els.length <= 3) {
-                    report.push(`  -> первый текст: "${els[0].innerText?.trim().slice(0, 100)}"`);
+                try {
+                    const els = document.querySelectorAll(sel);
+                    report.push(sel + ": найдено " + els.length);
+                    if (els.length > 0 && els.length <= 5) {
+                        report.push("  -> первый текст: " + (els[0].innerText || "").trim().slice(0, 120));
+                    }
+                } catch(e) {
+                    report.push(sel + ": ОШИБКА СЕЛЕКТОРА - " + e.message);
                 }
             }
 
-            // Дополнительно: ищем любые ссылки на игроков
             const playerLinks = document.querySelectorAll('a[href*="/player/"]');
-            report.push(`a[href*="/player/"]: найдено ${playerLinks.length}`);
             if (playerLinks.length > 0) {
-                report.push(`  -> первый: "${playerLinks[0].innerText?.trim()}" href="${playerLinks[0].href}"`);
+                report.push("Примеры ссылок на игроков:");
+                for (let i = 0; i < Math.min(3, playerLinks.length); i++) {
+                    report.push("  " + playerLinks[i].innerText.trim() + " -> " + playerLinks[i].href);
+                }
             }
 
-            // Ищем любые span с текстом похожим на имя команды
             const teamLinks = document.querySelectorAll('a[href*="/team/"]');
-            report.push(`a[href*="/team/"]: найдено ${teamLinks.length}`);
             if (teamLinks.length > 0) {
-                report.push(`  -> первый: "${teamLinks[0].innerText?.trim().slice(0, 80)}"`);
+                report.push("Примеры ссылок на команды:");
+                for (let i = 0; i < Math.min(3, teamLinks.length); i++) {
+                    report.push("  " + teamLinks[i].innerText.trim().slice(0, 80) + " -> " + teamLinks[i].href);
+                }
             }
 
-            // Смотрим x-data атрибуты
-            const xdata = document.querySelectorAll('[x-data]');
-            report.push(`[x-data] элементов: ${xdata.length}`);
-
-            // Смотрим x-text атрибуты
-            const xtext = document.querySelectorAll('[x-text]');
-            report.push(`[x-text] элементов: ${xtext.length}`);
-            if (xtext.length > 0 && xtext.length <= 10) {
-                for (const el of xtext) {
-                    report.push(`  x-text="${el.getAttribute('x-text')}" -> текст: "${el.innerText?.trim().slice(0, 60)}"`);
+            const xtextEls = document.querySelectorAll('[x-text]');
+            if (xtextEls.length > 0) {
+                report.push("x-text атрибуты (первые 10):");
+                for (let i = 0; i < Math.min(10, xtextEls.length); i++) {
+                    const attr = xtextEls[i].getAttribute('x-text');
+                    const text = (xtextEls[i].innerText || "").trim().slice(0, 60);
+                    report.push("  x-text='" + attr + "' -> '" + text + "'");
                 }
             }
 
@@ -77,13 +73,9 @@ async def main():
 
         print("\n".join(diag_signings))
 
-        # Сохраняем кусок HTML для анализа
-        html_snippet = await page.evaluate('''() => {
-            // Берём первые 3000 символов body для анализа структуры
-            return document.body.innerHTML.slice(0, 5000);
-        }''')
-        print("\n=== ПЕРВЫЕ 5000 СИМВОЛОВ HTML ===")
-        print(html_snippet)
+        print("\n=== ПЕРВЫЕ 5000 СИМВОЛОВ HTML (ПОДПИСАНИЯ) ===")
+        html_signings = await page.evaluate('() => document.body.innerHTML.slice(0, 5000)')
+        print(html_signings)
 
         # --- ДИАГНОСТИКА ТРЕЙДОВ ---
         print("\n=== ДИАГНОСТИКА ТРЕЙДОВ ===")
@@ -94,19 +86,24 @@ async def main():
             const report = [];
 
             const checks = [
-                'div[x-html="row.details_nolinks"]',
-                'div[x-html]',
                 '[x-html]',
+                'div[x-html]',
+                'a[href*="/trade/"]',
                 'div[x-data]',
-                'a[href*="/trade/"]'
+                '[x-text]'
             ];
 
             for (const sel of checks) {
-                const els = document.querySelectorAll(sel);
-                report.push(`${sel}: найдено ${els.length}`);
-                if (els.length > 0 && els.length <= 3) {
-                    report.push(`  -> первый текст: "${els[0].innerText?.trim().slice(0, 150)}"`);
-                    report.push(`  -> атрибут x-html: "${els[0].getAttribute('x-html')}"`);
+                try {
+                    const els = document.querySelectorAll(sel);
+                    report.push(sel + ": найдено " + els.length);
+                    if (els.length > 0 && els.length <= 3) {
+                        report.push("  -> текст: " + (els[0].innerText || "").trim().slice(0, 150));
+                        const xh = els[0].getAttribute('x-html');
+                        if (xh) report.push("  -> x-html атрибут: " + xh);
+                    }
+                } catch(e) {
+                    report.push(sel + ": ОШИБКА - " + e.message);
                 }
             }
 
@@ -114,6 +111,10 @@ async def main():
         }''')
 
         print("\n".join(diag_trades))
+
+        print("\n=== ПЕРВЫЕ 5000 СИМВОЛОВ HTML (ТРЕЙДЫ) ===")
+        html_trades = await page.evaluate('() => document.body.innerHTML.slice(0, 5000)')
+        print(html_trades)
 
         await browser.close()
 
