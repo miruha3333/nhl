@@ -1,153 +1,13 @@
 import asyncio
 import os
 import re
-import json
 import subprocess
 import requests
 from playwright.async_api import async_playwright
 
-# --- НАСТРОЙКИ ---
-
-TEAM_MAPPING = {
-    'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
-    'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN', 'islanders': 'NYI',
-    'rangers': 'NYR', 'kings': 'LAK', 'sabres': 'BUF', 'blackhawks': 'CHI', 'golden knights': 'VGK',
-    'canucks': 'VAN', 'flyers': 'PHI', 'bruins': 'BOS', 'sharks': 'SJS', 'hurricanes': 'CAR',
-    'penguins': 'PIT', 'capitals': 'WSH', 'canadiens': 'MTL', 'senators': 'OTT', 'red wings': 'DET',
-    'redwings': 'DET', 'maple leafs': 'TOR', 'mapleleafs': 'TOR', 'oilers': 'EDM', 'panthers': 'FLA',
-    'lightning': 'TBL', 'stars': 'DAL', 'avalanche': 'COL', 'devils': 'NJD', 'kraken': 'SEA',
-    'flames': 'CGY', 'blues': 'STL'
-}
-
-RUS_TEAM_MAPPING = {
-    'Buffalo Sabres': {'main': 'Баффало обменяли', 'from': 'из Баффало'},
-    'Carolina Hurricanes': {'main': 'Каролина обменяла', 'from': 'из Каролины'},
-    'Boston Bruins': {'main': 'Бостон обменял', 'from': 'из Бостона'},
-    'Columbus Blue Jackets': {'main': 'Коламбус обменял', 'from': 'из Коламбуса'},
-    'Detroit Red Wings': {'main': 'Детройт обменял', 'from': 'из Детройта'},
-    'New Jersey Devils': {'main': 'Нью-Джерси обменяли', 'from': 'из Нью-Джерси'},
-    'Montreal Canadiens': {'main': 'Монреаль обменял', 'from': 'из Монреаля'},
-    'New York Islanders': {'main': 'Айлендерс обменял', 'from': 'из Айлендерс'},
-    'Ottawa Senators': {'main': 'Оттава обменяла', 'from': 'из Оттавы'},
-    'New York Rangers': {'main': 'Рейнджерс обменяли', 'from': 'из Рейнджерс'},
-    'Tampa Bay Lightning': {'main': 'Тампа обменяла', 'from': 'из Тампы'},
-    'Philadelphia Flyers': {'main': 'Филадельфия обменяла', 'from': 'из Филадельфии'},
-    'Toronto Maple Leafs': {'main': 'Торонто обменяло', 'from': 'из Торонто'},
-    'Pittsburgh Penguins': {'main': 'Питтсбург обменял', 'from': 'из Питтсбурга'},
-    'Florida Panthers': {'main': 'Флорида обменяла', 'from': 'из Флориды'},
-    'Washington Capitals': {'main': 'Вашингтон обменял', 'from': 'из Вашингтона'},
-    'Chicago Blackhawks': {'main': 'Чикаго обменяло', 'from': 'из Чикаго'},
-    'Anaheim Ducks': {'main': 'Анахайм обменял', 'from': 'из Анахайма'},
-    'Colorado Avalanche': {'main': 'Колорадо обменяло', 'from': 'из Колорадо'},
-    'Calgary Flames': {'main': 'Калгари обменяли', 'from': 'из Калгари'},
-    'Dallas Stars': {'main': 'Даллас обменял', 'from': 'из Далласа'},
-    'Edmonton Oilers': {'main': 'Эдмонтон обменял', 'from': 'из Эдмонтона'},
-    'Minnesota Wild': {'main': 'Миннесота обменяла', 'from': 'из Миннесоты'},
-    'Los Angeles Kings': {'main': 'Лос-Анджелес обменял', 'from': 'из Лос-Анджелеса'},
-    'Nashville Predators': {'main': 'Нэшвилл обменял', 'from': 'из Нэшвилла'},
-    'San Jose Sharks': {'main': 'Сан-Хосе обменяло', 'from': 'из Сан-Хосе'},
-    'St. Louis Blues': {'main': 'Сент-Луис обменял', 'from': 'из Сент-Луиса'},
-    'Seattle Kraken': {'main': 'Сиэттл обменял', 'from': 'из Сиэттла'},
-    'Utah Mammoth': {'main': 'Юта обменяла', 'from': 'из Юты'},
-    'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
-    'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
-}
-
 CACHE_FILE = "last_data_cache.txt"
 
-def get_last_cached_signature():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return ""
-
-def save_to_cache_and_commit(new_signature):
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        f.write(new_signature)
-
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", CACHE_FILE], check=True)
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-                print("Кэш успешно сохранен в репозиторий GitHub.")
-        except Exception as e:
-            print(f"Не удалось сохранить кэш в Git: {e}")
-
-def get_rus_team_data(eng_name):
-    clean_name = eng_name.strip()
-    for key, value in RUS_TEAM_MAPPING.items():
-        if clean_name.lower() in key.lower():
-            return value
-    return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
-
-def send_to_telegram(text):
-    token = os.environ.get("TG_TOKEN")
-    chat_id = os.environ.get("TG_CHAT_ID")
-    if not token or not chat_id:
-        return
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    max_len = 3500
-    parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
-    for part in parts:
-        try:
-            requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
-        except Exception as e:
-            print(f"Ошибка отправки: {e}")
-
-def get_team_abbr(team_name_raw):
-    if not team_name_raw:
-        return ""
-    clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
-    for team_key, abbr in TEAM_MAPPING.items():
-        if team_key in clean_name:
-            return f"({abbr})"
-    return f"({clean_name[:3].upper()})"
-
-def format_years(years_raw):
-    try:
-        years = int(re.sub(r'[^0-9]', '', str(years_raw)))
-    except:
-        return "на срок"
-    if years == 1:
-        return "на 1 год"
-    elif 2 <= years <= 4:
-        return f"на {years} года"
-    else:
-        return f"на {years} лет"
-
-def format_cap_hit(val_raw):
-    try:
-        clean_val = int(re.sub(r'[^0-9]', '', str(val_raw)))
-        return f"{clean_val:,}"
-    except:
-        return f"{val_raw}"
-
-def translate_trade(text):
-    if "forfeit" in text.lower():
-        return text
-    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
-    match = re.search(pattern, text)
-    if match:
-        team1, p1, team2, p2 = match.groups()
-        rus_team1_data = get_rus_team_data(team1)
-        rus_team2_data = get_rus_team_data(team2)
-
-        p1 = p1.replace(".", "").replace(" and ", " и ")
-        p2 = p2.replace(".", "").replace(" and ", " и ")
-
-        return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
-    return text
-
 async def main():
-    extracted_signings = []
-    trades = []
-
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -155,192 +15,107 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- СБОР ПОДПИСАНИЙ ---
-        print("Загрузка страницы подписаний...")
-        try:
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-            # Ждём появления блока с названием команды — он рендерится позже всего
-            await page.wait_for_selector(
-                'a.pl-2.text-pp-copy_dk span.hidden',
-                timeout=30000
-            )
-        except Exception as e:
-            print(f"Предупреждение по подписаниям: {e}")
+        # --- ДИАГНОСТИКА ПОДПИСАНИЙ ---
+        print("=== ДИАГНОСТИКА ПОДПИСАНИЙ ===")
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        
+        # Ждём дольше — даём Alpine.js время отрендерить данные
+        await asyncio.sleep(8)
 
-        extracted_signings = await page.evaluate('''() => {
-            const results = [];
+        diag_signings = await page.evaluate('''() => {
+            const report = [];
 
-            // Ищем все блоки с именем игрока: div.font-bold > a.pp_link
-            const nameLinks = Array.from(document.querySelectorAll(
-                'div.font-bold.font-sans.text-lg a.pp_link'
-            ));
+            // Проверяем наличие ключевых селекторов
+            const checks = [
+                'div.font-bold.font-sans.text-lg',
+                'div.font-bold.font-sans.text-lg a.pp_link',
+                'a.pl-2.text-pp-copy_dk',
+                'a.pl-2.text-pp-copy_dk span',
+                'a.pp_link',
+                'tr[\\:key="x.cid"]',
+                'div[x-data]',
+                'div.flex-1.mt-3'
+            ];
 
-            for (const nameLink of nameLinks) {
-                try {
-                    const name = nameLink.querySelector('span')?.innerText?.trim()
-                        || nameLink.innerText?.trim()
-                        || '';
-                    if (!name) continue;
-
-                    // Поднимаемся к общему контейнеру карточки подписания
-                    // Структура: карточка содержит имя + блок с деталями контракта
-                    const card = nameLink.closest('li, article, [class*="border"], div[class*="py-"]')
-                        || nameLink.parentElement?.parentElement?.parentElement;
-
-                    // --- Название команды ---
-                    // Берём из span с x-text="v.sign_city + ' ' + v.sign_team_name"
-                    const teamSpan = card?.querySelector(
-                        'a.pl-2.text-pp-copy_dk span.hidden'
-                    );
-                    const team_name = teamSpan?.innerText?.trim() || '';
-
-                    // --- Детали контракта: Cap Hit и Term ---
-                    // Ищем блок с деталями: div.flex-1.mt-3...grid-cols-3
-                    const detailsBlock = card?.querySelector(
-                        'div.flex-1.mt-3, div[class*="grid-cols-3"]'
-                    );
-
-                    let cap_hit = '0';
-                    let term = '1';
-                    let lvl = '';
-                    let type_name = '';
-
-                    if (detailsBlock) {
-                        // Каждый элемент деталей — пара: заголовок (label) + значение
-                        // Ищем все дочерние div-блоки внутри детализации
-                        const detailItems = Array.from(detailsBlock.querySelectorAll('div'));
-
-                        for (let i = 0; i < detailItems.length; i++) {
-                            const text = detailItems[i].innerText?.trim().toLowerCase();
-
-                            if (text === 'cap hit') {
-                                // Значение — следующий соседний элемент или родительский next sibling
-                                const val = detailItems[i].nextElementSibling?.innerText?.trim()
-                                    || detailItems[i].parentElement?.nextElementSibling?.innerText?.trim()
-                                    || '';
-                                if (val) cap_hit = val;
-                            }
-
-                            if (text === 'term' || text === 'length') {
-                                const val = detailItems[i].nextElementSibling?.innerText?.trim()
-                                    || detailItems[i].parentElement?.nextElementSibling?.innerText?.trim()
-                                    || '';
-                                if (val) term = val;
-                            }
-
-                            if (/^(elc|ufa|rfa|pto)$/i.test(text)) {
-                                lvl = text.toUpperCase();
-                            }
-
-                            if (/extension/i.test(text)) {
-                                type_name = text;
-                            }
-                        }
-                    }
-
-                    // Разбиваем имя на имя + фамилию
-                    const nameParts = name.split(' ');
-                    const p_fn = nameParts[0] || '';
-                    const p_ln = nameParts.slice(1).join(' ') || '';
-
-                    results.push({ p_fn, p_ln, team_name, cval: cap_hit, len: term, lvl, type_name });
-
-                    if (results.length >= 5) break;
-                } catch (err) {
-                    // пропускаем сломанные карточки
+            for (const sel of checks) {
+                const els = document.querySelectorAll(sel);
+                report.push(`${sel}: найдено ${els.length} элементов`);
+                if (els.length > 0 && els.length <= 3) {
+                    report.push(`  -> первый текст: "${els[0].innerText?.trim().slice(0, 100)}"`);
                 }
             }
 
-            return results;
+            // Дополнительно: ищем любые ссылки на игроков
+            const playerLinks = document.querySelectorAll('a[href*="/player/"]');
+            report.push(`a[href*="/player/"]: найдено ${playerLinks.length}`);
+            if (playerLinks.length > 0) {
+                report.push(`  -> первый: "${playerLinks[0].innerText?.trim()}" href="${playerLinks[0].href}"`);
+            }
+
+            // Ищем любые span с текстом похожим на имя команды
+            const teamLinks = document.querySelectorAll('a[href*="/team/"]');
+            report.push(`a[href*="/team/"]: найдено ${teamLinks.length}`);
+            if (teamLinks.length > 0) {
+                report.push(`  -> первый: "${teamLinks[0].innerText?.trim().slice(0, 80)}"`);
+            }
+
+            // Смотрим x-data атрибуты
+            const xdata = document.querySelectorAll('[x-data]');
+            report.push(`[x-data] элементов: ${xdata.length}`);
+
+            // Смотрим x-text атрибуты
+            const xtext = document.querySelectorAll('[x-text]');
+            report.push(`[x-text] элементов: ${xtext.length}`);
+            if (xtext.length > 0 && xtext.length <= 10) {
+                for (const el of xtext) {
+                    report.push(`  x-text="${el.getAttribute('x-text')}" -> текст: "${el.innerText?.trim().slice(0, 60)}"`);
+                }
+            }
+
+            return report;
         }''')
 
-        print(f"Найдено подписаний: {len(extracted_signings)}")
-        if extracted_signings:
-            print(f"Пример первой записи: {extracted_signings[0]}")
+        print("\n".join(diag_signings))
 
-        # --- СБОР ТРЕЙДОВ ---
-        print("Загрузка страницы трейдов...")
-        try:
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
-        except Exception as e:
-            print(f"Предупреждение по трейдам: {e}")
+        # Сохраняем кусок HTML для анализа
+        html_snippet = await page.evaluate('''() => {
+            // Берём первые 3000 символов body для анализа структуры
+            return document.body.innerHTML.slice(0, 5000);
+        }''')
+        print("\n=== ПЕРВЫЕ 5000 СИМВОЛОВ HTML ===")
+        print(html_snippet)
 
-        all_trades = await page.evaluate('''() => {
-            const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
-            return blocks.map(el => el.innerText.trim());
+        # --- ДИАГНОСТИКА ТРЕЙДОВ ---
+        print("\n=== ДИАГНОСТИКА ТРЕЙДОВ ===")
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(8)
+
+        diag_trades = await page.evaluate('''() => {
+            const report = [];
+
+            const checks = [
+                'div[x-html="row.details_nolinks"]',
+                'div[x-html]',
+                '[x-html]',
+                'div[x-data]',
+                'a[href*="/trade/"]'
+            ];
+
+            for (const sel of checks) {
+                const els = document.querySelectorAll(sel);
+                report.push(`${sel}: найдено ${els.length}`);
+                if (els.length > 0 && els.length <= 3) {
+                    report.push(`  -> первый текст: "${els[0].innerText?.trim().slice(0, 150)}"`);
+                    report.push(`  -> атрибут x-html: "${els[0].getAttribute('x-html')}"`);
+                }
+            }
+
+            return report;
         }''')
 
-        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
+        print("\n".join(diag_trades))
 
         await browser.close()
-
-    if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались. Операция прервана.")
-        return
-
-    print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
-
-    # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
-    s_list = []
-    current_signature_elements = []
-
-    for item in extracted_signings[:3]:
-        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
-        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
-        name = f"{first_name} {last_name}".strip()
-        if not name:
-            continue
-
-        current_signature_elements.append(name)
-
-        lvl = str(item.get("lvl", "")).upper()
-        raw_cval = str(item.get('cval', 0) or 0)
-        try:
-            total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
-        except:
-            total_val = 0
-
-        years_raw = str(item.get('len') or '1')
-        try:
-            years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
-        except:
-            years = 1
-
-        # Cap Hit уже является кэпхитом — не делим на годы
-        cap_val = total_val
-
-        raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type or "продл" in raw_type:
-            ctype = "продлил контракт"
-        else:
-            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
-        s_list.append(line)
-
-    seen = set()
-    unique_trades = []
-    for t in trades:
-        if t not in seen:
-            seen.add(t)
-            unique_trades.append(t)
-
-    t_list = unique_trades[:3]
-    for t in t_list:
-        current_signature_elements.append(t[:50])
-
-    current_signature = "|".join(current_signature_elements)
-    last_cached_signature = get_last_cached_signature()
-
-    if current_signature == last_cached_signature:
-        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки дубликатов.")
-        return
-
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
-
-    send_to_telegram(message)
-    save_to_cache_and_commit(current_signature)
 
 if __name__ == "__main__":
     asyncio.run(main())
