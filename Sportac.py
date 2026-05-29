@@ -150,36 +150,52 @@ async def main():
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
             
-            # Ждем появления элементов, в которых есть нужные нам классы
-            await page.wait_for_function('''() => {
-                return Array.from(document.querySelectorAll('div')).some(el => 
-                    el.className && 
-                    typeof el.className === 'string' &&
-                    el.className.includes('grid-cols-3') && 
-                    el.className.includes('lg:justify-end')
-                );
-            }''', timeout=20000)
+            # Ждем появления любой ссылки на профиль игрока. Это 100% гарантия, что таблица загрузилась.
+            await page.wait_for_selector('a[href*="/player/"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
         extracted_signings = await page.evaluate('''() => {
-            // Находим все блоки с параметрами контракта по классам, которые вы нашли
-            const statsBlocks = Array.from(document.querySelectorAll('div')).filter(el => 
-                el.className && 
-                typeof el.className === 'string' &&
-                el.className.includes('flex-1') && 
-                el.className.includes('grid-cols-3') && 
-                el.className.includes('lg:justify-end')
-            );
-
-            return statsBlocks.slice(0, 5).map(statsBlock => {
-                // Идем к родительскому элементу, в котором лежит вся инфа по игроку
-                const container = statsBlock.parentElement;
+            // Собираем все ссылки на игроков (чтобы игнорировать элементы без данных)
+            const playerLinks = Array.from(document.querySelectorAll('a[href*="/player/"]'));
+            let results = [];
+            let seenNames = new Set();
+            
+            for (let link of playerLinks) {
+                const nameText = link.innerText.trim();
+                // Игнорируем пустые ссылки или дубликаты
+                if (!nameText || seenNames.has(nameText)) continue;
                 
-                // --- ИМЯ ---
-                // Обычно имя находится в ссылке с профилем
-                const nameLink = container.querySelector('a[href*="/player/"], .pp_link');
-                const nameText = nameLink ? nameLink.innerText.trim() : '';
+                let container = link.parentElement;
+                let statsBlock = null;
+                
+                // Поднимаемся вверх по структуре HTML (до 6 уровней)
+                for (let i = 0; i < 6; i++) {
+                    if (!container) break;
+                    // Ищем по классам, которые вы указали (grid-cols-3 и lg:justify-end)
+                    // Используем class*="...", чтобы не ломался поиск из-за спецсимволов Tailwind (двоеточий)
+                    statsBlock = container.querySelector('[class*="grid-cols-3"][class*="justify-end"]');
+                    if (statsBlock) break;
+                    container = container.parentElement;
+                }
+                
+                // РЕЗЕРВНЫЙ ПОИСК: если классы изменят, просто ищем блок со словами "Length" или "Cap Hit"
+                if (!statsBlock) {
+                    container = link.parentElement;
+                    for (let i = 0; i < 6; i++) {
+                        if (!container) break;
+                        if (container.innerText.includes('Length') || container.innerText.includes('Cap Hit')) {
+                            statsBlock = container;
+                            break;
+                        }
+                        container = container.parentElement;
+                    }
+                }
+                
+                // Если статистика не найдена, пропускаем
+                if (!statsBlock || !container) continue;
+                
+                seenNames.add(nameText);
                 const parts = nameText.split(' ');
                 
                 // --- КОМАНДА ---
@@ -198,32 +214,40 @@ async def main():
                 let type_name = '';
                 let lvl = '';
                 
-                Array.from(statsBlock.children).forEach(statBox => {
-                    // Используем ASCII код переноса строки, чтобы избежать проблем с экранированием Python/JS
-                    const textLines = statBox.innerText.split(String.fromCharCode(10));
-                    const rawText = textLines.join(' ');
-                    const textLower = rawText.toLowerCase();
-                    
-                    if (textLower.includes('length')) {
-                        len = rawText.replace(/length/ig, '').trim();
-                    } else if (textLower.includes('cap hit') || textLower.includes('aav')) {
-                        cval = rawText.replace(/cap hit|aav/ig, '').trim();
-                    } else if (textLower.includes('total') && (!cval || cval === '0')) {
-                        cval = rawText.replace(/total/ig, '').trim();
-                    } else if (textLower.includes('type')) {
-                        type_name = rawText.replace(/type/ig, '').trim();
-                        if (type_name.toLowerCase().includes('elc')) {
-                            lvl = 'ELC';
-                        }
+                // Используем безопасный разделитель (перенос строки) для Python и JS
+                const rawText = statsBlock.innerText || '';
+                const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
+                
+                // Читаем значения. На сайте структура обычно: "Заголовок" -> следующая строка "Значение"
+                for (let i = 0; i < lines.length; i++) {
+                    const lowerLine = lines[i].toLowerCase();
+                    if (lowerLine === 'length' && lines[i+1]) {
+                        len = lines[i+1];
+                    } else if ((lowerLine === 'cap hit' || lowerLine === 'aav') && lines[i+1]) {
+                        cval = lines[i+1];
+                    } else if (lowerLine === 'type' && lines[i+1]) {
+                        type_name = lines[i+1];
+                        if (type_name.toLowerCase().includes('elc')) lvl = 'ELC';
+                    } else if (lowerLine === 'total' && (!cval || cval === '0') && lines[i+1]) {
+                        cval = lines[i+1];
                     }
-                });
+                }
 
-                // На всякий случай проверяем весь текст блока
+                // Резерв: если переносов строк нет (сплошной текст)
+                if (len === '1' && cval === '0') {
+                    const words = rawText.split(' ');
+                    words.forEach((w, i) => {
+                        if (w.toLowerCase() === 'length' && words[i+1]) len = words[i+1];
+                        if ((w.toLowerCase() === 'hit' || w.toLowerCase() === 'aav') && words[i+1]) cval = words[i+1];
+                    });
+                }
+
+                // Проверяем тип контракта по всему тексту контейнера
                 const fullText = container.innerText.toLowerCase();
                 if (!type_name && fullText.includes('extension')) type_name = 'Extension';
                 if (!lvl && fullText.includes('elc')) lvl = 'ELC';
                 
-                return {
+                results.push({
                     p_fn: parts[0] || '',
                     p_ln: parts.slice(1).join(' ') || '',
                     team_name: team_name,
@@ -231,8 +255,13 @@ async def main():
                     len: len,
                     lvl: lvl,
                     type_name: type_name
-                };
-            });
+                });
+                
+                // Берем только 5 последних
+                if (results.length >= 5) break;
+            }
+            
+            return results;
         }''')
 
         # --- СБОР ТРЕЙДОВ ---
