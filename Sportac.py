@@ -4,6 +4,7 @@ import re
 import subprocess
 import requests
 from playwright.async_api import async_playwright
+from playwright_stealth import stealth_async  # 1. Добавлен импорт
 
 # --- НАСТРОЙКИ ---
 TEAM_MAPPING = {
@@ -83,11 +84,11 @@ async def main():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
+        await stealth_async(page)  # 2. Активация маскировки
         
-        # Сбор подписаний
         print("Загрузка подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(12)
+        await asyncio.sleep(15)
         
         extracted_signings = await page.evaluate('''() => {
             const rows = Array.from(document.querySelectorAll('tr'));
@@ -102,10 +103,9 @@ async def main():
             });
         }''')
 
-        # Сбор трейдов
         print("Загрузка трейдов...")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(12)
+        await asyncio.sleep(15)
         
         trades = await page.evaluate('''() => {
             const elements = Array.from(document.querySelectorAll('*'));
