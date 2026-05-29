@@ -1,7 +1,6 @@
 import asyncio
 import os
 import re
-import json
 import subprocess
 import requests
 from playwright.async_api import async_playwright
@@ -113,9 +112,10 @@ async def main():
         page = await context.new_page()
 
         print("Загрузка сайта...")
-        await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=60000)
-        # Ожидание либо таблицы, либо вашего блока
-        await page.wait_for_selector('div.flex-1.mt-3.lg\\:mt-0, tr[\\:key="x.cid"]', timeout=30000)
+        
+        # Сбор подписаний
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(5) 
         
         extracted_signings = await page.evaluate('''() => {
             const rows = [...document.querySelectorAll('tr[\\\\:key="x.cid"]'), ...document.querySelectorAll('div.flex-1.mt-3.lg\\\\:mt-0 tr')];
@@ -133,13 +133,17 @@ async def main():
             });
         }''')
 
-        await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=60000)
-        await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=30000)
-        all_trades = await page.evaluate('() => Array.from(document.querySelectorAll(\'div[x-html="row.details_nolinks"]\')).map(el => el.innerText.trim())')
+        # Сбор трейдов
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(5)
+        
+        all_trades = await page.evaluate("() => Array.from(document.querySelectorAll('div[x-html=\"row.details_nolinks\"]')).map(el => el.innerText.trim())")
         trades = [t for t in all_trades if len(t) > 20]
         await browser.close()
 
-    if not extracted_signings and not trades: return
+    if not extracted_signings and not trades:
+        print("Данные не собрались.")
+        return
 
     s_list = [f"{s['name']} {'продлил' if 'ext' in s['type'] else 'подписал'} {format_years(s['len'])} с кэпхитом ${s['cval']} {get_team_abbr(s['team'])}" for s in extracted_signings[:3]]
     t_list = trades[:3]
