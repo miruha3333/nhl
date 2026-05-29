@@ -116,7 +116,8 @@ def format_years(years_raw):
 
 def format_cap_hit(val_raw):
     try:
-        clean_val = int(re.sub(r'[^0-9]', '', str(val_raw)))
+        # Переводим в float, а затем в int, чтобы убрать копейки и избежать склеивания с нулем
+        clean_val = int(float(val_raw))
         return f"${clean_val:,}"
     except:
         return f"${val_raw}"
@@ -143,8 +144,7 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         
-        # ЯВНО ЗАДАЕМ ДЕСКТОПНОЕ РАЗРЕШЕНИЕ (1920x1080)
-        # Иначе классы lg: (large screen) могут вообще не отрендериться фреймворком
+        # Десктопное разрешение для рендеринга классов lg:
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
@@ -154,30 +154,23 @@ async def main():
         # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            # networkidle: ждем, пока прекратятся все сетевые API запросы (загрузка динамики)
-            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
+            # domcontentloaded - работает быстро и не ждет бесконечной загрузки рекламы
+            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=30000)
             
-            # Скроллим страницу на случай, если там стоит ленивая загрузка
+            # Небольшой скролл для активации прогрузки (lazy-load)
             await page.evaluate("window.scrollBy(0, 800)")
             
-            # Даем скриптам 3 секунды, чтобы раскидать данные API по HTML-тегам
-            await asyncio.sleep(3)
+            # Просто ждем, пока на странице появятся ссылки на игроков
+            await page.wait_for_selector('a[href*="/player"]', timeout=15000)
             
-            # Ждем появления нужного контейнера
-            await page.wait_for_function('''() => {
-                return Array.from(document.querySelectorAll('div')).some(el => 
-                    el.className && 
-                    typeof el.className === 'string' &&
-                    el.className.includes('items-start') && 
-                    el.className.includes('flex-col') && 
-                    el.className.includes('lg:flex-row')
-                );
-            }''', timeout=15000)
+            # Даем скриптам сайта еще пару секунд, чтобы они точно расставили все классы
+            await asyncio.sleep(2)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        extracted_signings = await page.evaluate('''() => {
-            // Ищем все контейнеры по указанным тобой классам
+        # Сбор данных с помощью JavaScript
+        extracted_signings = await page.evaluate("""() => {
+            // Ищем контейнеры с нужными классами
             const blocks = Array.from(document.querySelectorAll('div')).filter(el => 
                 el.className && 
                 typeof el.className === 'string' &&
@@ -198,7 +191,6 @@ async def main():
                 if (nameLink) {
                     nameText = nameLink.innerText.trim();
                 } else {
-                    // Резерв: если ссылку убрали, ищем по жирному тексту или заголовку
                     const boldText = container.querySelector('.font-bold, font-semibold, h2, h3, strong');
                     if (boldText) nameText = boldText.innerText.trim();
                 }
@@ -224,33 +216,32 @@ async def main():
                 let lvl = '';
                 
                 const rawText = container.innerText || '';
+                // Разбиваем текст по переносам строк, чтобы читать пары "Ключ" -> "Значение"
                 const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
                 
-                // Проходимся по строкам. Значение обычно идет сразу под заголовком
                 for (let i = 0; i < lines.length; i++) {
                     const lowerLine = lines[i].toLowerCase();
-                    if (lowerLine === 'length' && lines[i+1]) {
+                    if ((lowerLine === 'length' || lowerLine === 'term') && lines[i+1]) {
                         len = lines[i+1];
                     } else if ((lowerLine === 'cap hit' || lowerLine === 'aav') && lines[i+1]) {
                         cval = lines[i+1];
                     } else if (lowerLine === 'type' && lines[i+1]) {
                         type_name = lines[i+1];
                         if (type_name.toLowerCase().includes('elc')) lvl = 'ELC';
-                    } else if (lowerLine === 'total' && (!cval || cval === '0') && lines[i+1]) {
+                    } else if ((lowerLine === 'total' || lowerLine === 'total value') && (!cval || cval === '0') && lines[i+1]) {
                         cval = lines[i+1];
                     }
                 }
 
-                // Резерв: если переносов строк нет (сплошной текст)
+                // Запасной план: если текст сплошной, без переносов
                 if (len === '1' && cval === '0') {
                     const words = rawText.split(/\\s+/);
                     words.forEach((w, i) => {
-                        if (w.toLowerCase() === 'length' && words[i+1]) len = words[i+1];
+                        if ((w.toLowerCase() === 'length' || w.toLowerCase() === 'term') && words[i+1]) len = words[i+1];
                         if ((w.toLowerCase() === 'hit' || w.toLowerCase() === 'aav') && words[i+1]) cval = words[i+1];
                     });
                 }
 
-                // Проверяем тип контракта по всему тексту контейнера
                 const fullText = rawText.toLowerCase();
                 if (!type_name && fullText.includes('extension')) type_name = 'Extension';
                 if (!lvl && fullText.includes('elc')) lvl = 'ELC';
@@ -265,26 +256,24 @@ async def main():
                     type_name: type_name
                 });
                 
-                // Берем только 5 последних
                 if (results.length >= 5) break;
             }
             
             return results;
-        }''')
+        }""")
 
         # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
         try:
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
+            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=15000)
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
-        # Точечно вытаскиваем текст трейда из блоков div x-html="row.details_nolinks"
-        all_trades = await page.evaluate('''() => {
+        all_trades = await page.evaluate("""() => {
             const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
             return blocks.map(el => el.innerText.trim());
-        }''')
+        }""")
         
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
@@ -309,14 +298,26 @@ async def main():
         current_signature_elements.append(name)
         
         lvl = str(item.get("lvl", "")).upper()
+        
         raw_cval = str(item.get('cval', 0) or 0)
         try:
-            total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
+            clean_cval = re.sub(r'[^0-9.]', '', raw_cval)
+            if 'm' in raw_cval.lower() or 'м' in raw_cval.lower():
+                total_val = float(clean_cval) * 1000000
+            else:
+                total_val = float(clean_cval) if clean_cval else 0
         except:
             total_val = 0
             
-        years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
-        cap_val = total_val / years if "ELC" in lvl else total_val
+        raw_len = str(item.get('len', '1'))
+        try:
+            years_match = re.search(r'\d+', raw_len)
+            years = int(years_match.group()) if years_match else 1
+        except:
+            years = 1
+            
+        # Используем значение напрямую (без деления), так как сайт отдает готовый CAP HIT
+        cap_val = total_val
         
         raw_type = str(item.get('type_name', '')).lower()
         if "extension" in raw_type or "продл" in raw_type:
