@@ -53,10 +53,11 @@ RUS_TEAM_MAPPING = {
 
 CACHE_FILE = "last_data_cache.txt"
 
+# Имитируем реальный AJAX запрос браузера со всеми заголовками проверки
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Origin": "https://puckpedia.com",
+    "X-Requested-With": "XMLHttpRequest",
     "Sec-Fetch-Dest": "empty",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Site": "same-origin",
@@ -152,21 +153,21 @@ async def main():
     signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
     trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
 
-    # Создаем единую сессию, которая будет сохранять куки между запросами
+    # Используем единую сессию с имитацией браузера Chrome
     session = requests.Session()
 
-    # Сначала имитируем заход на главную страницу, чтобы Cloudflare «одобрил» сессию
+    # Сначала заходим на основную страницу, чтобы сформировать сессию и получить куки авторизации
     try:
         init_headers = {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
         }
         session.get("https://puckpedia.com/", headers=init_headers, impersonate="chrome", timeout=15)
-        await asyncio.sleep(2) # Небольшая пауза, имитирующая чтение страницы человеком
+        await asyncio.sleep(2)
     except Exception as e:
         print(f"Предупреждение при инициализации сессии: {e}")
 
-    # --- 1. СБОР ПОДПИСАНИЙ ИЗ JSON API С ИСПОЛЬЗОВАНИЕМ СЕССИИ ---
+    # --- 1. СБОР ПОДПИСАНИЙ С ИСПОЛЬЗОВАНИЕМ СЕССИИ И ПРАВИЛЬНЫХ ЗАГОЛОВКОВ ---
     try:
         url = f"https://puckpedia.com/data/api_signings?q={signings_q}"
         headers_sign = HEADERS.copy()
@@ -182,7 +183,7 @@ async def main():
     except Exception as e:
         print(f"Исключение при выполнении запроса подписаний: {e}")
 
-    # --- 2. СБОР ТРЕЙДОВ ИЗ JSON API С ИСПОЛЬЗОВАНИЕМ СЕССИИ ---
+    # --- 2. СБОР ТРЕЙДОВ С ИСПОЛЬЗОВАНИЕМ СЕССИИ И ПРАВИЛЬНЫХ ЗАГОЛОВКОВ ---
     try:
         url = f"https://puckpedia.com/data/api_trades?q={trades_q}"
         headers_trade = HEADERS.copy()
@@ -229,7 +230,13 @@ async def main():
         years = int(item.get('len') or 1)
         cap_val = total_val / years if "ELC" in lvl else total_val
         
-        ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
+        # Разделяем обычные контракты и продления (contract extension)
+        raw_type = str(item.get('type_name', '')).lower()
+        if "extension" in raw_type:
+            ctype = "продлил контракт"
+        else:
+            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
+            
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
