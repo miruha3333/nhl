@@ -1,4 +1,9 @@
 import asyncio
+import os
+import re
+import subprocess
+import requests
+import json
 from playwright.async_api import async_playwright
 
 async def main():
@@ -9,112 +14,49 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- ДИАГНОСТИКА ПОДПИСАНИЙ ---
-        print("=== ДИАГНОСТИКА ПОДПИСАНИЙ ===")
+        # Перехватываем все сетевые запросы и ответы
+        api_responses = []
+
+        async def handle_response(response):
+            url = response.url
+            # Ищем запросы похожие на API с данными подписаний/трейдов
+            if any(k in url for k in ['signing', 'trade', 'transaction', 'api', 'json', 'data', 'puck']):
+                try:
+                    ct = response.headers.get('content-type', '')
+                    if 'json' in ct or 'javascript' in ct:
+                        body = await response.text()
+                        api_responses.append({
+                            'url': url,
+                            'status': response.status,
+                            'body_preview': body[:500]
+                        })
+                except:
+                    pass
+
+        page.on("response", handle_response)
+
+        print("=== ПЕРЕХВАТ ЗАПРОСОВ: ПОДПИСАНИЯ ===")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(8)
+        await asyncio.sleep(10)
 
-        diag_signings = await page.evaluate('''() => {
-            const report = [];
+        print(f"Перехвачено API-запросов: {len(api_responses)}")
+        for r in api_responses:
+            print(f"\nURL: {r['url']}")
+            print(f"Status: {r['status']}")
+            print(f"Body: {r['body_preview']}")
 
-            const checks = [
-                'div.font-bold',
-                'a.pp_link',
-                'a[href*="/player/"]',
-                'a[href*="/team/"]',
-                'a.pl-2',
-                'div[x-data]',
-                'span[x-text]',
-                '[x-text]',
-                '[x-html]',
-                'div.flex-1'
-            ];
+        # Сброс для трейдов
+        api_responses.clear()
 
-            for (const sel of checks) {
-                try {
-                    const els = document.querySelectorAll(sel);
-                    report.push(sel + ": найдено " + els.length);
-                    if (els.length > 0 && els.length <= 5) {
-                        report.push("  -> первый текст: " + (els[0].innerText || "").trim().slice(0, 120));
-                    }
-                } catch(e) {
-                    report.push(sel + ": ОШИБКА СЕЛЕКТОРА - " + e.message);
-                }
-            }
-
-            const playerLinks = document.querySelectorAll('a[href*="/player/"]');
-            if (playerLinks.length > 0) {
-                report.push("Примеры ссылок на игроков:");
-                for (let i = 0; i < Math.min(3, playerLinks.length); i++) {
-                    report.push("  " + playerLinks[i].innerText.trim() + " -> " + playerLinks[i].href);
-                }
-            }
-
-            const teamLinks = document.querySelectorAll('a[href*="/team/"]');
-            if (teamLinks.length > 0) {
-                report.push("Примеры ссылок на команды:");
-                for (let i = 0; i < Math.min(3, teamLinks.length); i++) {
-                    report.push("  " + teamLinks[i].innerText.trim().slice(0, 80) + " -> " + teamLinks[i].href);
-                }
-            }
-
-            const xtextEls = document.querySelectorAll('[x-text]');
-            if (xtextEls.length > 0) {
-                report.push("x-text атрибуты (первые 10):");
-                for (let i = 0; i < Math.min(10, xtextEls.length); i++) {
-                    const attr = xtextEls[i].getAttribute('x-text');
-                    const text = (xtextEls[i].innerText || "").trim().slice(0, 60);
-                    report.push("  x-text='" + attr + "' -> '" + text + "'");
-                }
-            }
-
-            return report;
-        }''')
-
-        print("\n".join(diag_signings))
-
-        print("\n=== ПЕРВЫЕ 5000 СИМВОЛОВ HTML (ПОДПИСАНИЯ) ===")
-        html_signings = await page.evaluate('() => document.body.innerHTML.slice(0, 5000)')
-        print(html_signings)
-
-        # --- ДИАГНОСТИКА ТРЕЙДОВ ---
-        print("\n=== ДИАГНОСТИКА ТРЕЙДОВ ===")
+        print("\n=== ПЕРЕХВАТ ЗАПРОСОВ: ТРЕЙДЫ ===")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(8)
+        await asyncio.sleep(10)
 
-        diag_trades = await page.evaluate('''() => {
-            const report = [];
-
-            const checks = [
-                '[x-html]',
-                'div[x-html]',
-                'a[href*="/trade/"]',
-                'div[x-data]',
-                '[x-text]'
-            ];
-
-            for (const sel of checks) {
-                try {
-                    const els = document.querySelectorAll(sel);
-                    report.push(sel + ": найдено " + els.length);
-                    if (els.length > 0 && els.length <= 3) {
-                        report.push("  -> текст: " + (els[0].innerText || "").trim().slice(0, 150));
-                        const xh = els[0].getAttribute('x-html');
-                        if (xh) report.push("  -> x-html атрибут: " + xh);
-                    }
-                } catch(e) {
-                    report.push(sel + ": ОШИБКА - " + e.message);
-                }
-            }
-
-            return report;
-        }''')
-
-        print("\n".join(diag_trades))
-
-        print("\n=== ПЕРВЫЕ 5000 СИМВОЛОВ HTML (ТРЕЙДЫ) ===")
-        html_trades = await page.evaluate('() => document.body.innerHTML.slice(0, 5000)')
-        print(html_trades)
+        print(f"Перехвачено API-запросов: {len(api_responses)}")
+        for r in api_responses:
+            print(f"\nURL: {r['url']}")
+            print(f"Status: {r['status']}")
+            print(f"Body: {r['body_preview']}")
 
         await browser.close()
 
