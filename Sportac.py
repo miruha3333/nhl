@@ -116,7 +116,6 @@ def format_years(years_raw):
 
 def format_cap_hit(val_raw):
     try:
-        # Решение проблемы лишнего нуля! 1002500.0 сначала конвертируется в float, а затем в int (1002500)
         clean_val = int(float(val_raw))
         return f"${clean_val:,}"
     except:
@@ -143,127 +142,63 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        
-        # Десктопное разрешение
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
         )
         page = await context.new_page()
         
-        # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            # domcontentloaded - работает быстрее и надежнее
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            await page.evaluate("window.scrollBy(0, 800)")
-            await asyncio.sleep(3)
-            
-            # Возвращаем работавший метод ожидания (поиск контейнера по классам)
-            await page.wait_for_function('''() => {
-                return Array.from(document.querySelectorAll('div')).some(el => 
-                    el.className && 
-                    typeof el.className === 'string' &&
-                    el.className.includes('items-start') && 
-                    el.className.includes('flex-col') && 
-                    el.className.includes('lg:flex-row')
-                );
-            }''', timeout=15000)
+            await page.wait_for_selector('a[href*="/player/"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
         extracted_signings = await page.evaluate('''() => {
-            const blocks = Array.from(document.querySelectorAll('div')).filter(el => 
-                el.className && 
-                typeof el.className === 'string' &&
-                el.className.includes('flex') && 
-                el.className.includes('items-start') && 
-                el.className.includes('flex-col') && 
-                el.className.includes('lg:flex-row')
-            );
+            // Ищем все элементы, которые содержат ссылки на игроков
+            const containers = Array.from(document.querySelectorAll('a[href*="/player/"]')).map(a => a.closest('div[class*="flex"]'));
             
             let results = [];
             let seenNames = new Set();
             
-            for (let container of blocks) {
-                // Ищем ссылку именно на профиль игрока (со слешем на конце)
+            for (let container of containers) {
+                if (!container) continue;
+                
                 const nameLink = container.querySelector('a[href*="/player/"]');
-                let nameText = '';
+                if (!nameLink) continue;
                 
-                if (nameLink) {
-                    nameText = nameLink.innerText.trim();
-                } else {
-                    const boldText = container.querySelector('.font-bold, font-semibold, h2, h3, strong');
-                    if (boldText) nameText = boldText.innerText.trim();
-                }
-                
-                if (!nameText || seenNames.has(nameText)) continue;
+                const nameText = nameLink.innerText.trim();
+                if (seenNames.has(nameText)) continue;
                 seenNames.add(nameText);
+                
+                const rawText = container.innerText || '';
                 const parts = nameText.split(' ');
                 
-                // --- КОМАНДА ---
-                const teamLink = container.querySelector('a[href*="/team"]');
-                let team_name = '';
-                if (teamLink) {
-                    team_name = teamLink.innerText.trim();
-                } else {
-                    const teamImg = container.querySelector('img[alt*="logo"]');
-                    if (teamImg) team_name = teamImg.getAttribute('alt').replace(/logo/i, '').trim();
-                }
-
-                // --- ДЕТАЛИ КОНТРАКТА ---
                 let len = '1';
                 let cval = '0';
                 let type_name = '';
-                let lvl = '';
                 
-                const rawText = container.innerText || '';
-                const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
-                
-                // Поиск параметров с учетом слова TERM вместо LENGTH
-                for (let i = 0; i < lines.length; i++) {
-                    const lowerLine = lines[i].toLowerCase();
-                    if ((lowerLine === 'length' || lowerLine === 'term') && lines[i+1]) {
-                        len = lines[i+1];
-                    } else if ((lowerLine === 'cap hit' || lowerLine === 'aav') && lines[i+1]) {
-                        cval = lines[i+1];
-                    } else if (lowerLine === 'type' && lines[i+1]) {
-                        type_name = lines[i+1];
-                        if (type_name.toLowerCase().includes('elc')) lvl = 'ELC';
-                    } else if ((lowerLine === 'total' || lowerLine === 'total value') && (!cval || cval === '0') && lines[i+1]) {
-                        cval = lines[i+1];
-                    }
-                }
-
-                if (len === '1' && cval === '0') {
-                    const words = rawText.split(/\\s+/);
-                    words.forEach((w, i) => {
-                        if ((w.toLowerCase() === 'length' || w.toLowerCase() === 'term') && words[i+1]) len = words[i+1];
-                        if ((w.toLowerCase() === 'hit' || w.toLowerCase() === 'aav') && words[i+1]) cval = words[i+1];
-                    });
-                }
-
-                const fullText = rawText.toLowerCase();
-                if (!type_name && fullText.includes('extension')) type_name = 'Extension';
-                if (!lvl && fullText.includes('elc')) lvl = 'ELC';
+                // Извлекаем данные из текста контейнера
+                const lines = rawText.split('\\n');
+                lines.forEach(line => {
+                    if (line.match(/Length|Term/i)) len = line.replace(/Length|Term/i, '').trim();
+                    if (line.match(/Cap Hit|AAV/i)) cval = line.replace(/Cap Hit|AAV/i, '').trim();
+                });
                 
                 results.push({
                     p_fn: parts[0] || '',
                     p_ln: parts.slice(1).join(' ') || '',
-                    team_name: team_name,
+                    team_name: container.innerText.match(/\\S+ (\\d{4}|\\d{2})/i) ? '' : 'Unknown', // Упрощенный поиск
                     cval: cval,
                     len: len,
-                    lvl: lvl,
-                    type_name: type_name
+                    type_name: rawText.match(/Extension/i) ? 'Extension' : ''
                 });
-                
                 if (results.length >= 5) break;
             }
-            
             return results;
         }''')
 
-        # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
         try:
             await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
@@ -271,88 +206,39 @@ async def main():
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
-        all_trades = await page.evaluate('''() => {
-            const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
-            return blocks.map(el => el.innerText.trim());
-        }''')
-        
+        all_trades = await page.evaluate('() => Array.from(document.querySelectorAll(\'div[x-html="row.details_nolinks"]\')).map(el => el.innerText.trim())')
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались из HTML структуры. Операция прервана.")
         return
 
-    print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
-
-    # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
     s_list = []
     current_signature_elements = []
 
     for item in extracted_signings[:3]:
-        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
-        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
-        name = f"{first_name} {last_name}".strip()
-        if not name: continue
-        
+        name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
         current_signature_elements.append(name)
         
-        lvl = str(item.get("lvl", "")).upper()
+        raw_cval = re.sub(r'[^0-9.]', '', str(item.get('cval', '0')))
+        total_val = float(raw_cval) * (1000000 if 'm' in str(item.get('cval', '')).lower() else 1)
         
-        raw_cval = str(item.get('cval', 0) or 0)
-        try:
-            # Очищаем от мусора, оставляем только цифры и точку
-            clean_cval = re.sub(r'[^0-9.]', '', raw_cval)
-            if not clean_cval: clean_cval = "0"
-            
-            if 'm' in raw_cval.lower() or 'м' in raw_cval.lower():
-                total_val = float(clean_cval) * 1000000
-            else:
-                total_val = float(clean_cval)
-        except:
-            total_val = 0
-            
-        # Надежное извлечение срока контракта из строк вроде "3yr"
-        raw_len = str(item.get('len', '1'))
-        try:
-            years_match = re.search(r'\d+', raw_len)
-            years = int(years_match.group()) if years_match else 1
-        except:
-            years = 1
-            
-        # Мы берем значение CAP HIT напрямую, делить на срок не нужно
-        cap_val = total_val
+        years = int(re.search(r'\d+', str(item.get('len', '1'))).group()) if re.search(r'\d+', str(item.get('len', '1'))) else 1
         
-        raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type or "продл" in raw_type:
-            ctype = "продлил контракт"
-        else:
-            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-            
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
+        ctype = "продлил контракт" if "extension" in str(item.get('type_name', '')).lower() else "подписал контракт"
+        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(total_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
-    seen = set()
-    unique_trades = []
-    for t in trades:
-        if t not in seen:
-            seen.add(t)
-            unique_trades.append(t)
-
-    t_list = unique_trades[:3]
+    t_list = list(dict.fromkeys(trades))[:3]
     for t in t_list:
         current_signature_elements.append(t[:50])
 
     current_signature = "|".join(current_signature_elements)
-    last_cached_signature = get_last_cached_signature()
-
-    if current_signature == last_cached_signature:
-        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки дубликатов.")
+    if current_signature == get_last_cached_signature():
         return
     
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
-    
+    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s for s in s_list])}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t for t in t_list])}"
     send_to_telegram(message)
     save_to_cache_and_commit(current_signature)
 
