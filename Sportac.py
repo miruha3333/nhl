@@ -62,7 +62,6 @@ def get_last_cached_signature():
 def save_to_cache_and_commit(new_signature):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         f.write(new_signature)
-    
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
@@ -73,7 +72,7 @@ def save_to_cache_and_commit(new_signature):
                 subprocess.run(["git", "commit", "-m", "Обновление кэша событий [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
         except Exception as e:
-            print(f"Ошибка сохранения в Git: {e}")
+            print(f"Git error: {e}")
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -82,23 +81,24 @@ def get_rus_team_data(eng_name):
             return value
     return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
 
-def send_to_telegram(text):
-    token = os.environ.get("TG_TOKEN")
-    chat_id = os.environ.get("TG_CHAT_ID")
-    if not token or not chat_id: return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    parts = [text[i:i+3500] for i in range(0, len(text), 3500)]
-    for part in parts:
-        try:
-            requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
-        except Exception as e:
-            print(f"Ошибка отправки: {e}")
-
 def get_team_abbr(team_name_raw):
     clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
     for team_key, abbr in TEAM_MAPPING.items():
         if team_key in clean_name: return f"({abbr})"
     return f"({clean_name[:3].upper()})"
+
+def translate_trade(text):
+    if "forfeit" in text.lower(): return text
+    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
+    match = re.search(pattern, text)
+    if match:
+        team1, p1, team2, p2 = match.groups()
+        rus_team1_data = get_rus_team_data(team1)
+        rus_team2_data = get_rus_team_data(team2)
+        p1 = p1.replace(".", "").replace(" and ", " и ")
+        p2 = p2.replace(".", "").replace(" and ", " и ")
+        return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
+    return text
 
 async def main():
     extracted_signings = []
@@ -110,11 +110,12 @@ async def main():
         
         # Сбор подписаний
         print("Загрузка подписаний...")
-        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-        await asyncio.sleep(8)
-        
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(10)
         extracted_signings = await page.evaluate('''() => {
-            const container = document.querySelector('div.flex-1.mt-3.lg\\:mt-0');
+            const container = Array.from(document.querySelectorAll('div')).find(div => 
+                div.className.includes('flex-1') && div.className.includes('mt-3') && div.className.includes('grid-cols-3')
+            );
             const rows = container ? Array.from(container.querySelectorAll('tr')) : Array.from(document.querySelectorAll('tr'));
             return rows.filter(tr => tr.innerText.includes('$')).slice(0, 5).map(tr => {
                 const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
@@ -122,18 +123,15 @@ async def main():
                     name: tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || 'Unknown',
                     team: cells[1] || '',
                     cval: cells[2] || '0',
-                    len: cells[3] || '1',
-                    lvl: cells[4] || '',
-                    type: cells[5] || ''
+                    len: cells[3] || '1'
                 };
             });
         }''')
 
         # Сбор трейдов
         print("Загрузка трейдов...")
-        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-        await asyncio.sleep(8)
-        
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(10)
         trades = await page.evaluate('''() => {
             return Array.from(document.querySelectorAll('*'))
                 .filter(el => el.getAttribute('x-html') === 'row.details_nolinks')
@@ -146,22 +144,17 @@ async def main():
         print("Данные не найдены.")
         return
 
-    # Формирование сообщения
-    lines = []
-    current_sig = []
-    
-    for s in extracted_signings:
-        line = f"{s['name']} - {s['cval']} на {s['len']} года {get_team_abbr(s['team'])}"
-        lines.append(line)
-        current_sig.append(s['name'])
-        
-    trade_lines = [t for t in trades if len(t) > 20][:3]
+    lines = [f"{s['name']} - {s['cval']} на {s['len']} года {get_team_abbr(s['team'])}" for s in extracted_signings]
+    trade_lines = [translate_trade(t) for t in trades if len(t) > 20][:3]
     
     msg = "🔥 ПОДПИСАНИЯ:\n" + "\n".join(lines) + "\n\n🤝 ТРЕЙДЫ:\n" + "\n".join(trade_lines)
     
-    if "|".join(current_sig) != get_last_cached_signature():
-        send_to_telegram(msg)
-        save_to_cache_and_commit("|".join(current_sig))
+    current_sig = "|".join([s['name'] for s in extracted_signings] + trade_lines)
+    if current_sig != get_last_cached_signature():
+        token, chat_id = os.environ.get("TG_TOKEN"), os.environ.get("TG_CHAT_ID")
+        if token and chat_id:
+            requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={"chat_id": chat_id, "text": msg})
+        save_to_cache_and_commit(current_sig)
 
 if __name__ == "__main__":
     asyncio.run(main())
