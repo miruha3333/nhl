@@ -79,25 +79,22 @@ def get_team_abbr(team_name_raw):
 async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        # Эмуляция обычного браузера
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080}
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         
-        # --- СБОР ПОДПИСАНИЙ ---
+        # Сбор подписаний
         print("Загрузка подписаний...")
-        await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=60000)
-        await asyncio.sleep(10)
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(12)
         
         extracted_signings = await page.evaluate('''() => {
-            // Ищем все строки таблицы, в которых есть знак доллара (признак контракта)
             const rows = Array.from(document.querySelectorAll('tr'));
             return rows.filter(tr => tr.innerText.includes('$')).slice(0, 5).map(tr => {
                 const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
                 return {
-                    name: tr.innerText.split('\n')[0].trim(),
+                    name: tr.innerText.split('\\n')[0].trim(),
                     team: cells[1] || 'N/A',
                     cval: cells[2] || '0',
                     len: cells[3] || '1'
@@ -105,14 +102,13 @@ async def main():
             });
         }''')
 
-        # --- СБОР ТРЕЙДОВ ---
+        # Сбор трейдов
         print("Загрузка трейдов...")
-        await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=60000)
-        await asyncio.sleep(10)
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(12)
         
         trades = await page.evaluate('''() => {
-            // Ищем блоки с текстом трейдов
-            const elements = Array.from(document.querySelectorAll('div'));
+            const elements = Array.from(document.querySelectorAll('*'));
             return elements.filter(el => el.getAttribute('x-html') === 'row.details_nolinks')
                            .map(el => el.innerText.trim());
         }''')
@@ -120,10 +116,9 @@ async def main():
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Данные не найдены. Скрипт завершен.")
+        print("Данные не найдены, возможно капча.")
         return
 
-    # Формирование и отправка
     lines = [f"{s['name']} — {s['cval']} на {s['len']} года {get_team_abbr(s['team'])}" for s in extracted_signings]
     trade_lines = [t for t in trades if len(t) > 15][:3]
     msg = "🔥 ПОДПИСАНИЯ:\n" + "\n".join(lines) + "\n\n🤝 ТРЕЙДЫ:\n" + "\n".join(trade_lines)
