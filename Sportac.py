@@ -3,7 +3,6 @@ import os
 import re
 import requests
 import subprocess
-from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
 TEAM_MAPPING = {
@@ -53,6 +52,15 @@ RUS_TEAM_MAPPING = {
 
 CACHE_FILE = "last_data_cache.txt"
 
+# Качественные заголовки для маскировки под реального пользователя
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://puckpedia.com",
+    "Referer": "https://puckpedia.com/"
+}
+
 def get_last_cached_signature():
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -75,7 +83,7 @@ def save_to_cache_and_commit(new_signature):
                 subprocess.run(["git", "push"], check=True)
                 print("Кэш успешно сохранен в репозиторий.")
         except Exception as e:
-            print(f"Не удалось сохранить кэш in Git: {e}")
+            print(f"Не удалось сохранить кэш в Git: {e}")
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -135,66 +143,38 @@ async def main():
     extracted_signings = []
     trades = []
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            locale="en-US",
-            timezone_id="America/New_York"
-        )
-        page = await context.new_page()
-        
-        async def on_response(response):
-            if "api_signings" in response.url:
-                try:
-                    data = await response.json()
-                    if isinstance(data, dict):
-                        if "data" in data and "p" in data["data"]: extracted_signings.extend(data["data"]["p"])
-                        elif "rows" in data: extracted_signings.extend(data["rows"])
-                except: pass
-        page.on("response", on_response)
-        
-        # --- СБОР ПОДПИСАНИЙ ---
-        try:
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=30000)
-            # УМНОЕ ОЖИДАНИЕ: Ждем появления строк таблицы до 15 секунд
-            await page.wait_for_selector('table.pp_table2 tbody tr', timeout=15000)
-        except Exception as e:
-            print(f"Предупреждение по подписаниям (таймаут ожидания таблицы): {e}")
+    # --- ЧИСТЫЙ API СБОР ПОДПИСАНИЙ ---
+    try:
+        # Дергаем прямую ручку АПИ, которую сайт использует для вывода таблицы подписаний
+        signings_api_url = "https://puckpedia.com/api/api_signings?sort=date&direction=desc"
+        res = requests.get(signings_api_url, headers=HEADERS, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, dict) and "data" in data and "p" in data["data"]:
+                extracted_signings = data["data"]["p"]
+    except Exception as e:
+        print(f"Ошибка запроса АПИ подписаний: {e}")
 
-        if not extracted_signings:
-            extracted_signings = await page.evaluate('''() => {
-                const rows = Array.from(document.querySelectorAll('table.pp_table2 tbody tr'));
-                return rows.slice(0, 3).map(tr => {
-                    const firstCell = tr.querySelector('td:first-child');
-                    const linkSpan = firstCell ? firstCell.innerText.trim() : '';
-                    const nameParts = linkSpan.split(' ');
-                    return {
-                        p_fn: nameParts[0] || '',
-                        p_ln: nameParts.slice(1).join(' ') || '',
-                        team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
-                        cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
-                        len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
-                        lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
-                    };
-                });
-            }''')
-        
-        # --- СБОР ТРЕЙДОВ ---
-        try:
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=30000)
-            # УМНОЕ ОЖИДАНИЕ: Ждем появления контента трейдов до 15 секунд
-            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
-        except Exception as e:
-            print(f"Предупреждение по трейдам (таймаут ожидания данных): {e}")
-        
-        all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
-        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
-        
-        await browser.close()
+    # --- ЧИСТЫЙ API СБОР ТРЕЙДОВ ---
+    try:
+        # Дергаем прямую ручку АПИ для таблицы обменов
+        trades_api_url = "https://puckpedia.com/api/api_trades?sort=date&direction=desc"
+        res = requests.get(trades_api_url, headers=HEADERS, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            # Трейды на PuckPedia приходят строками с HTML-тегами внутри "details_nolinks"
+            if isinstance(data, dict) and "rows" in data:
+                for row in data["rows"]:
+                    html_text = row.get("details_nolinks", "")
+                    # Очищаем текст от HTML тегов <a> и <span>
+                    clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
+                    if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
+                        trades.append(translate_trade(clean_text))
+    except Exception as e:
+        print(f"Ошибка запроса АПИ трейдов: {e}")
 
     if not extracted_signings and not trades:
-        print("Внимание: Данные вообще не собрались. Отмена операции.")
+        print("Внимание: Данные через API вообще не собрались. Отмена операции.")
         return
 
     # --- ФОРМИРОВАНИЕ ---
