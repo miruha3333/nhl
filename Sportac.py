@@ -141,15 +141,12 @@ async def main():
     extracted_signings = []
     trades = []
 
-    signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-    trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
         page = await context.new_page()
         
-        # Перехватываем ответы от точного JSON API, которые триггерит браузер
+        # Перехватываем ответы внутренних вызовов API сайта при загрузке обычных страниц разделов
         async def on_response(response):
             if "api_signings" in response.url:
                 try:
@@ -170,14 +167,19 @@ async def main():
 
         page.on("response", on_response)
         
-        # Переходим по прямым ссылкам API с нужными параметрами через браузер (так Cloudflare их пропускает)
+        # --- 1. ПЕРЕХОД НА СТРАНИЦУ ПОДПИСАНИЙ ---
         try:
-            await page.goto(f"https://puckpedia.com/data/api_signings?q={signings_q}", wait_until="load", timeout=30000)
+            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
+            # Ожидаем отрисовки таблицы Vue, чтобы внутренний API точно успел отдать ответ
+            await page.wait_for_selector('table.pp_table2.stickycol.sortDesc tbody tr', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
             
+        # --- 2. ПЕРЕХОД НА СТРАНИЦУ ТРЕЙДОВ ---
         try:
-            await page.goto(f"https://puckpedia.com/data/api_trades?q={trades_q}", wait_until="load", timeout=30000)
+            await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=45000)
+            # Ожидаем появления элементов с деталями трейдов
+            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
