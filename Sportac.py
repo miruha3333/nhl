@@ -146,7 +146,7 @@ async def main():
         context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
         page = await context.new_page()
         
-        # Перехватываем ответы внутренних вызовов API сайта при загрузке обычных страниц разделов
+        # Перехватываем ответы внутренних вызовов API сайта
         async def on_response(response):
             if "api_signings" in response.url:
                 try:
@@ -167,19 +167,22 @@ async def main():
 
         page.on("response", on_response)
         
-        # --- 1. ПЕРЕХОД НА СТРАНИЦУ ПОДПИСАНИЙ ---
+        # --- 1. СТРАНИЦА ПОДПИСАНИЙ ---
         try:
-            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
-            # Ожидаем отрисовки таблицы Vue, чтобы внутренний API точно успел отдать ответ
-            await page.wait_for_selector('table.pp_table2.stickycol.sortDesc tbody tr', timeout=20000)
+            # Ждем только базовый DOM (HTML структуру), не дожидаясь фоновых скриптов счетчиков
+            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
+            # Ждем конкретно загрузку строк таблицы Vue (сигнал, что API отдал данные)
+            await page.wait_for_selector('table.pp_table2 tbody tr', timeout=30000)
+            await asyncio.sleep(2) # Даем полсекунды на отработку обработчика on_response
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
             
-        # --- 2. ПЕРЕХОД НА СТРАНИЦУ ТРЕЙДОВ ---
+        # --- 2. СТРАНИЦА ТРЕЙДОВ ---
         try:
-            await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=45000)
-            # Ожидаем появления элементов с деталями трейдов
-            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=20000)
+            # Точно так же уходим от бесконечного ожидания сетевого штиля
+            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
+            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=30000)
+            await asyncio.sleep(2)
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
