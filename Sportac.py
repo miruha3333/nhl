@@ -150,50 +150,32 @@ async def main():
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
             
-            # Ждем появления любой ссылки на профиль игрока. Это 100% гарантия, что таблица загрузилась.
+            # Ждем появления ссылки на игрока, чтобы убедиться, что контент подгружен
             await page.wait_for_selector('a[href*="/player/"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
         extracted_signings = await page.evaluate('''() => {
-            // Собираем все ссылки на игроков (чтобы игнорировать элементы без данных)
-            const playerLinks = Array.from(document.querySelectorAll('a[href*="/player/"]'));
+            // Ищем все контейнеры по указанному тобой классу
+            const blocks = Array.from(document.querySelectorAll('div')).filter(el => 
+                el.className && 
+                typeof el.className === 'string' &&
+                el.className.includes('flex') && 
+                el.className.includes('items-start') && 
+                el.className.includes('flex-col') && 
+                el.className.includes('lg:flex-row')
+            );
+            
             let results = [];
             let seenNames = new Set();
             
-            for (let link of playerLinks) {
-                const nameText = link.innerText.trim();
-                // Игнорируем пустые ссылки или дубликаты
-                if (!nameText || seenNames.has(nameText)) continue;
+            for (let container of blocks) {
+                // --- ИМЯ ИГРОКА ---
+                const nameLink = container.querySelector('a[href*="/player/"]');
+                if (!nameLink) continue; // Если имени нет, пропускаем
                 
-                let container = link.parentElement;
-                let statsBlock = null;
-                
-                // Поднимаемся вверх по структуре HTML (до 6 уровней)
-                for (let i = 0; i < 6; i++) {
-                    if (!container) break;
-                    // Ищем по классам, которые вы указали (grid-cols-3 и lg:justify-end)
-                    // Используем class*="...", чтобы не ломался поиск из-за спецсимволов Tailwind (двоеточий)
-                    statsBlock = container.querySelector('[class*="grid-cols-3"][class*="justify-end"]');
-                    if (statsBlock) break;
-                    container = container.parentElement;
-                }
-                
-                // РЕЗЕРВНЫЙ ПОИСК: если классы изменят, просто ищем блок со словами "Length" или "Cap Hit"
-                if (!statsBlock) {
-                    container = link.parentElement;
-                    for (let i = 0; i < 6; i++) {
-                        if (!container) break;
-                        if (container.innerText.includes('Length') || container.innerText.includes('Cap Hit')) {
-                            statsBlock = container;
-                            break;
-                        }
-                        container = container.parentElement;
-                    }
-                }
-                
-                // Если статистика не найдена, пропускаем
-                if (!statsBlock || !container) continue;
+                const nameText = nameLink.innerText.trim();
+                if (!nameText || seenNames.has(nameText)) continue; // Защита от дублей
                 
                 seenNames.add(nameText);
                 const parts = nameText.split(' ');
@@ -214,11 +196,11 @@ async def main():
                 let type_name = '';
                 let lvl = '';
                 
-                // Используем безопасный разделитель (перенос строки) для Python и JS
-                const rawText = statsBlock.innerText || '';
+                // Используем безопасный разделитель (перенос строки) для разделения параметров
+                const rawText = container.innerText || '';
                 const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
                 
-                // Читаем значения. На сайте структура обычно: "Заголовок" -> следующая строка "Значение"
+                // Читаем значения "Заголовок" -> следующая строка "Значение"
                 for (let i = 0; i < lines.length; i++) {
                     const lowerLine = lines[i].toLowerCase();
                     if (lowerLine === 'length' && lines[i+1]) {
@@ -235,7 +217,7 @@ async def main():
 
                 // Резерв: если переносов строк нет (сплошной текст)
                 if (len === '1' && cval === '0') {
-                    const words = rawText.split(' ');
+                    const words = rawText.split(/\\s+/);
                     words.forEach((w, i) => {
                         if (w.toLowerCase() === 'length' && words[i+1]) len = words[i+1];
                         if ((w.toLowerCase() === 'hit' || w.toLowerCase() === 'aav') && words[i+1]) cval = words[i+1];
@@ -243,7 +225,7 @@ async def main():
                 }
 
                 // Проверяем тип контракта по всему тексту контейнера
-                const fullText = container.innerText.toLowerCase();
+                const fullText = rawText.toLowerCase();
                 if (!type_name && fullText.includes('extension')) type_name = 'Extension';
                 if (!lvl && fullText.includes('elc')) lvl = 'ELC';
                 
