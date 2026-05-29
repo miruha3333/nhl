@@ -149,20 +149,19 @@ async def main():
         print("Загрузка страницы подписаний...")
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Обходим проблему двоеточия: ищем строку tr, у которой имя любого атрибута заканчивается на 'key' со значением 'x.cid'
-            await page.wait_for_selector('tr[*:key="x.cid"], table.pp_table2 tbody tr', timeout=20000)
+            # Ждем только базовый селектор таблицы без капризных двоеточий
+            await page.wait_for_selector('table.pp_table2 tbody tr', timeout=25000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Сбор данных с двойным уровнем надежности селекторов
+        # Сбор данных напрямую из DOM через JS
         extracted_signings = await page.evaluate('''() => {
-            // Пытаемся найти по vue-ключу, если нет — берем просто любые строки таблицы
-            let rows = Array.from(document.querySelectorAll('tr'));
-            rows = rows.filter(tr => {
-                const attrs = tr.getAttributeNames();
-                return attrs.some(a => a.includes('key') && tr.getAttribute(a) === 'x.cid');
+            // Ищем tr, у которых есть любой атрибут, содержащий слово 'key' и значение 'x.cid'
+            let rows = Array.from(document.querySelectorAll('tr')).filter(tr => {
+                return tr.getAttributeNames().some(a => a.includes('key') && tr.getAttribute(a) === 'x.cid');
             });
             
+            // Запасной план: если vue-атрибут не найден, берем любые строки таблицы
             if (rows.length === 0) {
                 rows = Array.from(document.querySelectorAll('table.pp_table2 tbody tr'));
             }
@@ -171,13 +170,17 @@ async def main():
                 const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
                 const parts = nameText.trim().split(' ');
                 
+                // Название команды берем строго из логотипа/атрибута ссылки в начале строки (его собственной команды)
+                const teamImg = tr.querySelector('td:nth-child(2) img');
+                const teamName = teamImg ? (teamImg.getAttribute('alt') || teamImg.getAttribute('title') || '') : '';
+                
                 const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
                 const typeText = cells.find(txt => txt.toLowerCase().includes('extension')) || '';
                 
                 return {
                     p_fn: parts[0] || '',
                     p_ln: parts.slice(1).join(' ') || '',
-                    team_name: tr.querySelector('td:nth-child(2)')?.innerText || '',
+                    team_name: teamName || tr.querySelector('td:nth-child(2)')?.innerText || '',
                     cval: tr.querySelector('td:nth-child(3)')?.innerText || '0',
                     len: tr.querySelector('td:nth-child(4)')?.innerText || '1',
                     lvl: tr.querySelector('td:nth-child(5)')?.innerText || '',
@@ -190,7 +193,7 @@ async def main():
         print("Загрузка страницы трейдов...")
         try:
             await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
+            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=25000)
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
