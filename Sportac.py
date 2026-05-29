@@ -159,72 +159,91 @@ async def main():
         print("Загрузка страницы подписаний...")
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-
-            # Ждём появления динамически подгружаемых карточек игроков
+            # Ждём появления блока с названием команды — он рендерится позже всего
             await page.wait_for_selector(
-                'div.flex-1.mt-3.grid.grid-cols-3',
+                'a.pl-2.text-pp-copy_dk span.hidden',
                 timeout=30000
             )
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Собираем данные из динамических карточек игроков
         extracted_signings = await page.evaluate('''() => {
             const results = [];
 
-            // Ищем все строки-карточки подписаний
-            // Каждая карточка игрока содержит блок с деталями контракта
-            const playerCards = Array.from(document.querySelectorAll(
-                'div.flex-1.mt-3, div[class*="flex-1"][class*="mt-3"][class*="grid-cols-3"]'
+            // Ищем все блоки с именем игрока: div.font-bold > a.pp_link
+            const nameLinks = Array.from(document.querySelectorAll(
+                'div.font-bold.font-sans.text-lg a.pp_link'
             ));
 
-            for (const card of playerCards) {
+            for (const nameLink of nameLinks) {
                 try {
-                    // Поднимаемся к родительскому блоку всей строки подписания
-                    const row = card.closest('[class*="border-b"], [class*="py-"], li, article') || card.parentElement;
+                    const name = nameLink.querySelector('span')?.innerText?.trim()
+                        || nameLink.innerText?.trim()
+                        || '';
+                    if (!name) continue;
 
-                    // Имя игрока — ищем ближайшую ссылку или заголовок рядом с карточкой
-                    const nameEl = row?.querySelector('a[href*="/player/"], span.font-bold, h2, h3')
-                        || card.previousElementSibling?.querySelector('a, span')
-                        || card.parentElement?.previousElementSibling?.querySelector('a, span');
-                    const fullName = nameEl?.innerText?.trim() || '';
-                    if (!fullName) continue;
+                    // Поднимаемся к общему контейнеру карточки подписания
+                    // Структура: карточка содержит имя + блок с деталями контракта
+                    const card = nameLink.closest('li, article, [class*="border"], div[class*="py-"]')
+                        || nameLink.parentElement?.parentElement?.parentElement;
 
-                    const nameParts = fullName.split(' ');
-                    const p_fn = nameParts[0] || '';
-                    const p_ln = nameParts.slice(1).join(' ') || '';
+                    // --- Название команды ---
+                    // Берём из span с x-text="v.sign_city + ' ' + v.sign_team_name"
+                    const teamSpan = card?.querySelector(
+                        'a.pl-2.text-pp-copy_dk span.hidden'
+                    );
+                    const team_name = teamSpan?.innerText?.trim() || '';
 
-                    // Все текстовые блоки внутри карточки деталей
-                    const spans = Array.from(card.querySelectorAll('span, div'));
-                    const texts = spans.map(el => el.innerText?.trim()).filter(Boolean);
+                    // --- Детали контракта: Cap Hit и Term ---
+                    // Ищем блок с деталями: div.flex-1.mt-3...grid-cols-3
+                    const detailsBlock = card?.querySelector(
+                        'div.flex-1.mt-3, div[class*="grid-cols-3"]'
+                    );
 
-                    // Команда — ищем рядом с карточкой
-                    const teamEl = row?.querySelector('img[alt], [class*="team"], a[href*="/team/"]');
-                    const team_name = teamEl?.getAttribute('alt') || teamEl?.innerText?.trim() || '';
+                    let cap_hit = '0';
+                    let term = '1';
+                    let lvl = '';
+                    let type_name = '';
 
-                    // Пытаемся найти кэпхит, длину и уровень среди текстов
-                    let cval = '0', len = '1', lvl = '', type_name = '';
+                    if (detailsBlock) {
+                        // Каждый элемент деталей — пара: заголовок (label) + значение
+                        // Ищем все дочерние div-блоки внутри детализации
+                        const detailItems = Array.from(detailsBlock.querySelectorAll('div'));
 
-                    for (const t of texts) {
-                        // Кэпхит: содержит $ или выглядит как число с суффиксом M/K
-                        if (/\$[\d,]+|\d+[\.,]\d+\s*[MmKk]/.test(t)) {
-                            cval = t.replace(/[^0-9.]/g, '') || '0';
-                        }
-                        // Длина контракта: число + yr/year
-                        if (/^\d+\s*(yr|year)/i.test(t)) {
-                            len = t.replace(/[^0-9]/g, '') || '1';
-                        }
-                        // Уровень: ELC, UFA, RFA и т.д.
-                        if (/^(ELC|UFA|RFA|PTO|AHL|NHL)$/i.test(t)) {
-                            lvl = t.toUpperCase();
-                        }
-                        // Тип: Extension
-                        if (/extension/i.test(t)) {
-                            type_name = t;
+                        for (let i = 0; i < detailItems.length; i++) {
+                            const text = detailItems[i].innerText?.trim().toLowerCase();
+
+                            if (text === 'cap hit') {
+                                // Значение — следующий соседний элемент или родительский next sibling
+                                const val = detailItems[i].nextElementSibling?.innerText?.trim()
+                                    || detailItems[i].parentElement?.nextElementSibling?.innerText?.trim()
+                                    || '';
+                                if (val) cap_hit = val;
+                            }
+
+                            if (text === 'term' || text === 'length') {
+                                const val = detailItems[i].nextElementSibling?.innerText?.trim()
+                                    || detailItems[i].parentElement?.nextElementSibling?.innerText?.trim()
+                                    || '';
+                                if (val) term = val;
+                            }
+
+                            if (/^(elc|ufa|rfa|pto)$/i.test(text)) {
+                                lvl = text.toUpperCase();
+                            }
+
+                            if (/extension/i.test(text)) {
+                                type_name = text;
+                            }
                         }
                     }
 
-                    results.push({ p_fn, p_ln, team_name, cval, len, lvl, type_name });
+                    // Разбиваем имя на имя + фамилию
+                    const nameParts = name.split(' ');
+                    const p_fn = nameParts[0] || '';
+                    const p_ln = nameParts.slice(1).join(' ') || '';
+
+                    results.push({ p_fn, p_ln, team_name, cval: cap_hit, len: term, lvl, type_name });
 
                     if (results.length >= 5) break;
                 } catch (err) {
@@ -235,65 +254,9 @@ async def main():
             return results;
         }''')
 
-        print(f"Найдено подписаний через flex-карточки: {len(extracted_signings)}")
-
-        # Запасной вариант: если карточки не дали результат,
-        # пробуем найти данные через Alpine.js x-data или window.__data
-        if not extracted_signings:
-            print("Пробуем альтернативный способ сбора подписаний через JS-состояние...")
-            extracted_signings = await page.evaluate('''() => {
-                const results = [];
-
-                // Пытаемся найти Alpine.js компоненты с данными подписаний
-                const alpineEls = Array.from(document.querySelectorAll('[x-data]'));
-                for (const el of alpineEls) {
-                    try {
-                        const data = el._x_dataStack?.[0] || {};
-                        const items = data.signings || data.items || data.data || data.rows || [];
-                        if (Array.isArray(items) && items.length > 0) {
-                            for (const item of items.slice(0, 5)) {
-                                results.push({
-                                    p_fn: item.p_fn || item.first_name || '',
-                                    p_ln: item.p_ln || item.last_name || '',
-                                    team_name: item.team_name || item.team || '',
-                                    cval: String(item.cval || item.cap_hit || item.value || '0'),
-                                    len: String(item.len || item.years || item.length || '1'),
-                                    lvl: item.lvl || item.level || item.type || '',
-                                    type_name: item.type_name || ''
-                                });
-                            }
-                            if (results.length > 0) break;
-                        }
-                    } catch(e) {}
-                }
-
-                // Если Alpine не помог — пробуем найти данные в глобальных переменных окна
-                if (results.length === 0) {
-                    const candidates = ['signings', 'transactions', 'data', 'pageData', 'appData'];
-                    for (const key of candidates) {
-                        try {
-                            const val = window[key];
-                            if (Array.isArray(val) && val.length > 0 && val[0].p_fn !== undefined) {
-                                for (const item of val.slice(0, 5)) {
-                                    results.push({
-                                        p_fn: item.p_fn || '',
-                                        p_ln: item.p_ln || '',
-                                        team_name: item.team_name || '',
-                                        cval: String(item.cval || '0'),
-                                        len: String(item.len || '1'),
-                                        lvl: item.lvl || '',
-                                        type_name: item.type_name || ''
-                                    });
-                                }
-                                break;
-                            }
-                        } catch(e) {}
-                    }
-                }
-
-                return results;
-            }''')
-            print(f"Найдено подписаний через JS-состояние: {len(extracted_signings)}")
+        print(f"Найдено подписаний: {len(extracted_signings)}")
+        if extracted_signings:
+            print(f"Пример первой записи: {extracted_signings[0]}")
 
         # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
@@ -338,8 +301,14 @@ async def main():
         except:
             total_val = 0
 
-        years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
-        cap_val = total_val / years if "ELC" in lvl else total_val
+        years_raw = str(item.get('len') or '1')
+        try:
+            years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
+        except:
+            years = 1
+
+        # Cap Hit уже является кэпхитом — не делим на годы
+        cap_val = total_val
 
         raw_type = str(item.get('type_name', '')).lower()
         if "extension" in raw_type or "продл" in raw_type:
