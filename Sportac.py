@@ -142,9 +142,6 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        
-        # ЯВНО ЗАДАЕМ ДЕСКТОПНОЕ РАЗРЕШЕНИЕ (1920x1080)
-        # Иначе классы lg: (large screen) могут вообще не отрендериться фреймворком
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
@@ -154,199 +151,90 @@ async def main():
         # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            # networkidle: ждем, пока прекратятся все сетевые API запросы (загрузка динамики)
             await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
+            await asyncio.sleep(5)
             
-            # Скроллим страницу на случай, если там стоит ленивая загрузка
-            await page.evaluate("window.scrollBy(0, 800)")
-            
-            # Даем скриптам 3 секунды, чтобы раскидать данные API по HTML-тегам
-            await asyncio.sleep(3)
-            
-            # Ждем появления нужного контейнера
-            await page.wait_for_function('''() => {
-                return Array.from(document.querySelectorAll('div')).some(el => 
-                    el.className && 
-                    typeof el.className === 'string' &&
-                    el.className.includes('items-start') && 
-                    el.className.includes('flex-col') && 
-                    el.className.includes('lg:flex-row')
-                );
-            }''', timeout=15000)
-        except Exception as e:
-            print(f"Предупреждение по подписаниям: {e}")
-
-        extracted_signings = await page.evaluate('''() => {
-            // Ищем все контейнеры по указанным тобой классам
-            const blocks = Array.from(document.querySelectorAll('div')).filter(el => 
-                el.className && 
-                typeof el.className === 'string' &&
-                el.className.includes('flex') && 
-                el.className.includes('items-start') && 
-                el.className.includes('flex-col') && 
-                el.className.includes('lg:flex-row')
-            );
-            
-            let results = [];
-            let seenNames = new Set();
-            
-            for (let container of blocks) {
-                // --- ИМЯ ИГРОКА ---
-                const nameLink = container.querySelector('a[href*="/player"]');
-                let nameText = '';
-                
-                if (nameLink) {
-                    nameText = nameLink.innerText.trim();
-                } else {
-                    // Резерв: если ссылку убрали, ищем по жирному тексту или заголовку
-                    const boldText = container.querySelector('.font-bold, font-semibold, h2, h3, strong');
-                    if (boldText) nameText = boldText.innerText.trim();
-                }
-                
-                if (!nameText || seenNames.has(nameText)) continue;
-                seenNames.add(nameText);
-                const parts = nameText.split(' ');
-                
-                // --- КОМАНДА ---
-                const teamLink = container.querySelector('a[href*="/team"]');
-                let team_name = '';
-                if (teamLink) {
-                    team_name = teamLink.innerText.trim();
-                } else {
-                    const teamImg = container.querySelector('img[alt*="logo"]');
-                    if (teamImg) team_name = teamImg.getAttribute('alt').replace(/logo/i, '').trim();
-                }
-
-                // --- ДЕТАЛИ КОНТРАКТА ---
-                let len = '1';
-                let cval = '0';
-                let type_name = '';
-                let lvl = '';
-                
-                const rawText = container.innerText || '';
-                const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
-                
-                // Проходимся по строкам. Значение обычно идет сразу под заголовком
-                for (let i = 0; i < lines.length; i++) {
-                    const lowerLine = lines[i].toLowerCase();
-                    if (lowerLine === 'length' && lines[i+1]) {
-                        len = lines[i+1];
-                    } else if ((lowerLine === 'cap hit' || lowerLine === 'aav') && lines[i+1]) {
-                        cval = lines[i+1];
-                    } else if (lowerLine === 'type' && lines[i+1]) {
-                        type_name = lines[i+1];
-                        if (type_name.toLowerCase().includes('elc')) lvl = 'ELC';
-                    } else if (lowerLine === 'total' && (!cval || cval === '0') && lines[i+1]) {
-                        cval = lines[i+1];
+            # Новый, надежный метод сбора данных внутри блоков
+            extracted_signings = await page.evaluate('''() => {
+                const blocks = Array.from(document.querySelectorAll('div.flex.items-start.flex-col.lg\\:flex-row'));
+                return blocks.slice(0, 5).map(container => {
+                    // Имя: обычно внутри ссылок или в заголовках
+                    const nameEl = container.querySelector('a[href*="/player/"]') || container.querySelector('div.font-bold');
+                    const name = nameEl ? nameEl.innerText.trim() : "Unknown Player";
+                    
+                    // Команда: ищем по тексту внутри блоков или атрибутам
+                    const teamEl = container.querySelector('a[href*="/team/"]');
+                    const team = teamEl ? teamEl.innerText.trim() : "";
+                    
+                    // Извлекаем цифры для Cap Hit и Term из сетки данных
+                    const grid = container.querySelector('div.grid');
+                    let cval = "0";
+                    let len = "1";
+                    
+                    if (grid) {
+                        const items = Array.from(grid.querySelectorAll('div'));
+                        items.forEach((div, idx) => {
+                            const txt = div.innerText.toLowerCase();
+                            if (txt.includes('cap hit') || txt.includes('aav')) {
+                                cval = items[idx + 1] ? items[idx + 1].innerText.trim() : "0";
+                            }
+                            if (txt.includes('term')) {
+                                len = items[idx + 1] ? items[idx + 1].innerText.trim() : "1";
+                            }
+                        });
                     }
-                }
-
-                // Резерв: если переносов строк нет (сплошной текст)
-                if (len === '1' && cval === '0') {
-                    const words = rawText.split(/\\s+/);
-                    words.forEach((w, i) => {
-                        if (w.toLowerCase() === 'length' && words[i+1]) len = words[i+1];
-                        if ((w.toLowerCase() === 'hit' || w.toLowerCase() === 'aav') && words[i+1]) cval = words[i+1];
-                    });
-                }
-
-                // Проверяем тип контракта по всему тексту контейнера
-                const fullText = rawText.toLowerCase();
-                if (!type_name && fullText.includes('extension')) type_name = 'Extension';
-                if (!lvl && fullText.includes('elc')) lvl = 'ELC';
-                
-                results.push({
-                    p_fn: parts[0] || '',
-                    p_ln: parts.slice(1).join(' ') || '',
-                    team_name: team_name,
-                    cval: cval,
-                    len: len,
-                    lvl: lvl,
-                    type_name: type_name
+                    
+                    return { name, team, cval, len };
                 });
-                
-                // Берем только 5 последних
-                if (results.length >= 5) break;
-            }
-            
-            return results;
-        }''')
+            }''')
+        except Exception as e:
+            print(f"Ошибка при сборе подписаний: {e}")
 
         # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
         try:
             await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
             await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
+            all_trades = await page.evaluate('''() => {
+                const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
+                return blocks.map(el => el.innerText.trim());
+            }''')
+            trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         except Exception as e:
-            print(f"Предупреждение по трейдам: {e}")
-        
-        # Точечно вытаскиваем текст трейда из блоков div x-html="row.details_nolinks"
-        all_trades = await page.evaluate('''() => {
-            const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
-            return blocks.map(el => el.innerText.trim());
-        }''')
-        
-        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
+            print(f"Ошибка при сборе трейдов: {e}")
         
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались из HTML структуры. Операция прервана.")
+        print("Данные не найдены.")
         return
 
-    print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
-
-    # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
+    # --- ФОРМИРОВАНИЕ ТЕКСТА ---
     s_list = []
     current_signature_elements = []
 
-    for item in extracted_signings[:3]:
-        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
-        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
-        name = f"{first_name} {last_name}".strip()
-        if not name: continue
-        
+    for item in extracted_signings:
+        name = item['name']
         current_signature_elements.append(name)
         
-        lvl = str(item.get("lvl", "")).upper()
-        raw_cval = str(item.get('cval', 0) or 0)
-        try:
-            total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
-        except:
-            total_val = 0
-            
-        years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
-        cap_val = total_val / years if "ELC" in lvl else total_val
-        
-        raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type or "продл" in raw_type:
-            ctype = "продлил контракт"
-        else:
-            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-            
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
+        # Обработка данных
+        cval = item['cval']
+        len_val = item['len']
+        line = f"{name} подписал контракт {len_val} на сумму {cval} {get_team_abbr(item['team'])}"
         s_list.append(line)
         
     seen = set()
-    unique_trades = []
-    for t in trades:
-        if t not in seen:
-            seen.add(t)
-            unique_trades.append(t)
-
+    unique_trades = [t for t in trades if not (t in seen or seen.add(t))]
     t_list = unique_trades[:3]
     for t in t_list:
         current_signature_elements.append(t[:50])
 
     current_signature = "|".join(current_signature_elements)
-    last_cached_signature = get_last_cached_signature()
-
-    if current_signature == last_cached_signature:
-        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки дубликатов.")
+    if current_signature == get_last_cached_signature():
+        print("Новых событий нет.")
         return
     
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
-    
+    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list[:3]])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     send_to_telegram(message)
     save_to_cache_and_commit(current_signature)
 
