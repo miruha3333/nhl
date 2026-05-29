@@ -57,7 +57,9 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
     "Origin": "https://puckpedia.com",
-    "Referer": "https://puckpedia.com/signings"
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
 }
 
 def get_last_cached_signature():
@@ -101,7 +103,6 @@ def send_to_telegram(text):
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
         try:
-            # Используем curl_cffi, так как библиотека гарантированно установлена
             requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
         except Exception as e:
             print(f"Ошибка отправки сообщения: {e}")
@@ -151,10 +152,27 @@ async def main():
     signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
     trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
 
-    # --- 1. СБОР ПОДПИСАНИЙ ИЗ ОФИЦИАЛЬНОГО JSON API ---
+    # Создаем единую сессию, которая будет сохранять куки между запросами
+    session = requests.Session()
+
+    # Сначала имитируем заход на главную страницу, чтобы Cloudflare «одобрил» сессию
+    try:
+        init_headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        session.get("https://puckpedia.com/", headers=init_headers, impersonate="chrome", timeout=15)
+        await asyncio.sleep(2) # Небольшая пауза, имитирующая чтение страницы человеком
+    except Exception as e:
+        print(f"Предупреждение при инициализации сессии: {e}")
+
+    # --- 1. СБОР ПОДПИСАНИЙ ИЗ JSON API С ИСПОЛЬЗОВАНИЕМ СЕССИИ ---
     try:
         url = f"https://puckpedia.com/data/api_signings?q={signings_q}"
-        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=20)
+        headers_sign = HEADERS.copy()
+        headers_sign["Referer"] = "https://puckpedia.com/signings"
+        
+        res = session.get(url, headers=headers_sign, impersonate="chrome", timeout=20)
         if res.status_code == 200:
             res_json = res.json()
             if isinstance(res_json, dict) and "rows" in res_json:
@@ -164,10 +182,13 @@ async def main():
     except Exception as e:
         print(f"Исключение при выполнении запроса подписаний: {e}")
 
-    # --- 2. СБОР ТРЕЙДОВ ИЗ ОФИЦИАЛЬНОГО JSON API ---
+    # --- 2. СБОР ТРЕЙДОВ ИЗ JSON API С ИСПОЛЬЗОВАНИЕМ СЕССИИ ---
     try:
         url = f"https://puckpedia.com/data/api_trades?q={trades_q}"
-        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=20)
+        headers_trade = HEADERS.copy()
+        headers_trade["Referer"] = "https://puckpedia.com/trades"
+        
+        res = session.get(url, headers=headers_trade, impersonate="chrome", timeout=20)
         if res.status_code == 200:
             res_json = res.json()
             if isinstance(res_json, dict) and "rows" in res_json:
