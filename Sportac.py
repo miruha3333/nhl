@@ -149,19 +149,28 @@ async def main():
         print("Загрузка страницы подписаний...")
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Чтобы избежать падения по таймауту, используем явное ожидание появления tr с нужным атрибутом через корректный CSS-селектор
-            await page.wait_for_selector('tr[\\:key="x.cid"]', timeout=20000)
+            # Обходим проблему двоеточия: ищем строку tr, у которой имя любого атрибута заканчивается на 'key' со значением 'x.cid'
+            await page.wait_for_selector('tr[*:key="x.cid"], table.pp_table2 tbody tr', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Собираем данные прямо из структуры tr :key="x.cid"
+        # Сбор данных с двойным уровнем надежности селекторов
         extracted_signings = await page.evaluate('''() => {
-            const rows = Array.from(document.querySelectorAll('tr[\\\\:key="x.cid"]'));
+            // Пытаемся найти по vue-ключу, если нет — берем просто любые строки таблицы
+            let rows = Array.from(document.querySelectorAll('tr'));
+            rows = rows.filter(tr => {
+                const attrs = tr.getAttributeNames();
+                return attrs.some(a => a.includes('key') && tr.getAttribute(a) === 'x.cid');
+            });
+            
+            if (rows.length === 0) {
+                rows = Array.from(document.querySelectorAll('table.pp_table2 tbody tr'));
+            }
+            
             return rows.slice(0, 5).map(tr => {
                 const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
                 const parts = nameText.trim().split(' ');
                 
-                // Проверяем тип контракта в ячейках, ищем упоминание Extension
                 const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
                 const typeText = cells.find(txt => txt.toLowerCase().includes('extension')) || '';
                 
@@ -185,7 +194,6 @@ async def main():
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
-        # Точечно вытаскиваем текст трейда из блоков div x-html="row.details_nolinks"
         all_trades = await page.evaluate('''() => {
             const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
             return blocks.map(el => el.innerText.trim());
