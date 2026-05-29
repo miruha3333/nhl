@@ -75,7 +75,7 @@ def save_to_cache_and_commit(new_signature):
                 subprocess.run(["git", "push"], check=True)
                 print("Кэш успешно сохранен в репозиторий.")
         except Exception as e:
-            print(f"Не удалось сохранить кэш в Git: {e}")
+            print(f"Не удалось сохранить кэш in Git: {e}")
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -157,11 +157,11 @@ async def main():
         # --- СБОР ПОДПИСАНИЙ ---
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(8)
+            # УМНОЕ ОЖИДАНИЕ: Ждем появления строк таблицы до 15 секунд
+            await page.wait_for_selector('table.pp_table2 tbody tr', timeout=15000)
         except Exception as e:
-            print(f"Предупреждение по подписаниям: {e}")
+            print(f"Предупреждение по подписаниям (таймаут ожидания таблицы): {e}")
 
-        # Исправленный селектор таблицы (без лишних классов сортировки)
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
                 const rows = Array.from(document.querySelectorAll('table.pp_table2 tbody tr'));
@@ -183,9 +183,10 @@ async def main():
         # --- СБОР ТРЕЙДОВ ---
         try:
             await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(8)
+            # УМНОЕ ОЖИДАНИЕ: Ждем появления контента трейдов до 15 секунд
+            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
         except Exception as e:
-            print(f"Предупреждение по трейдам: {e}")
+            print(f"Предупреждение по трейдам (таймаут ожидания данных): {e}")
         
         all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
