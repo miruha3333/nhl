@@ -3,7 +3,8 @@ import os
 import re
 import json
 import subprocess
-from curl_cffi import requests
+import requests
+from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
 TEAM_MAPPING = {
@@ -53,16 +54,6 @@ RUS_TEAM_MAPPING = {
 
 CACHE_FILE = "last_data_cache.txt"
 
-# Имитируем реальный AJAX запрос браузера со всеми заголовками проверки
-HEADERS = {
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "X-Requested-With": "XMLHttpRequest",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
-}
-
 def get_last_cached_signature():
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -106,7 +97,7 @@ def send_to_telegram(text):
         try:
             requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
         except Exception as e:
-            print(f"Ошибка отправки сообщения: {e}")
+            print(f"Ошибка отправки: {e}")
 
 def get_team_abbr(team_name_raw):
     if not team_name_raw: return ""
@@ -153,61 +144,50 @@ async def main():
     signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
     trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
 
-    # Используем единую сессию с имитацией браузера Chrome
-    session = requests.Session()
-
-    # Сначала заходим на основную страницу, чтобы сформировать сессию и получить куки авторизации
-    try:
-        init_headers = {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        session.get("https://puckpedia.com/", headers=init_headers, impersonate="chrome", timeout=15)
-        await asyncio.sleep(2)
-    except Exception as e:
-        print(f"Предупреждение при инициализации сессии: {e}")
-
-    # --- 1. СБОР ПОДПИСАНИЙ С ИСПОЛЬЗОВАНИЕМ СЕССИИ И ПРАВИЛЬНЫХ ЗАГОЛОВКОВ ---
-    try:
-        url = f"https://puckpedia.com/data/api_signings?q={signings_q}"
-        headers_sign = HEADERS.copy()
-        headers_sign["Referer"] = "https://puckpedia.com/signings"
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        page = await context.new_page()
         
-        res = session.get(url, headers=headers_sign, impersonate="chrome", timeout=20)
-        if res.status_code == 200:
-            res_json = res.json()
-            if isinstance(res_json, dict) and "rows" in res_json:
-                extracted_signings = res_json["rows"]
-        else:
-            print(f"Ошибка API подписаний. Статус-код: {res.status_code}")
-    except Exception as e:
-        print(f"Исключение при выполнении запроса подписаний: {e}")
+        # Перехватываем ответы от точного JSON API, которые триггерит браузер
+        async def on_response(response):
+            if "api_signings" in response.url:
+                try:
+                    data = await response.json()
+                    if isinstance(data, dict) and "rows" in data:
+                        extracted_signings.extend(data["rows"])
+                except: pass
+            elif "api_trades" in response.url:
+                try:
+                    data = await response.json()
+                    if isinstance(data, dict) and "rows" in data:
+                        for row in data["rows"]:
+                            html_text = row.get("details_nolinks", "")
+                            clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
+                            if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
+                                trades.append(translate_trade(clean_text))
+                except: pass
 
-    # --- 2. СБОР ТРЕЙДОВ С ИСПОЛЬЗОВАНИЕМ СЕССИИ И ПРАВИЛЬНЫХ ЗАГОЛОВКОВ ---
-    try:
-        url = f"https://puckpedia.com/data/api_trades?q={trades_q}"
-        headers_trade = HEADERS.copy()
-        headers_trade["Referer"] = "https://puckpedia.com/trades"
+        page.on("response", on_response)
         
-        res = session.get(url, headers=headers_trade, impersonate="chrome", timeout=20)
-        if res.status_code == 200:
-            res_json = res.json()
-            if isinstance(res_json, dict) and "rows" in res_json:
-                for row in res_json["rows"]:
-                    html_text = row.get("details_nolinks", "")
-                    clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
-                    if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
-                        trades.append(translate_trade(clean_text))
-        else:
-            print(f"Ошибка API трейдов. Статус-код: {res.status_code}")
-    except Exception as e:
-        print(f"Исключение при выполнении запроса трейдов: {e}")
+        # Переходим по прямым ссылкам API с нужными параметрами через браузер (так Cloudflare их пропускает)
+        try:
+            await page.goto(f"https://puckpedia.com/data/api_signings?q={signings_q}", wait_until="load", timeout=30000)
+        except Exception as e:
+            print(f"Предупреждение по подписаниям: {e}")
+            
+        try:
+            await page.goto(f"https://puckpedia.com/data/api_trades?q={trades_q}", wait_until="load", timeout=30000)
+        except Exception as e:
+            print(f"Предупреждение по трейдам: {e}")
+        
+        await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались. Операция прервана.")
+        print("Внимание: Никакие данные не собрались через браузер. Операция прервана.")
         return
 
-    # --- СБОРКА И ПРОВЕРКА КЭША ---
+    # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
     s_list = []
     current_signature_elements = []
 
@@ -220,7 +200,6 @@ async def main():
         current_signature_elements.append(name)
         
         lvl = str(item.get("lvl", "")).upper()
-        
         raw_cval = str(item.get('cval', 0) or 0)
         try:
             total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
@@ -230,7 +209,6 @@ async def main():
         years = int(item.get('len') or 1)
         cap_val = total_val / years if "ELC" in lvl else total_val
         
-        # Разделяем обычные контракты и продления (contract extension)
         raw_type = str(item.get('type_name', '')).lower()
         if "extension" in raw_type:
             ctype = "продлил контракт"
@@ -248,7 +226,7 @@ async def main():
     last_cached_signature = get_last_cached_signature()
 
     if current_signature == last_cached_signature:
-        print("Новых событий на сайте нет. Отмена отправки.")
+        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки дубликатов.")
         return
     
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
