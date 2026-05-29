@@ -146,18 +146,20 @@ async def main():
         context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
         page = await context.new_page()
         
-        # Перехватываем ответы внутренних вызовов API сайта
+        # Перехват ответов API
         async def on_response(response):
             if "api_signings" in response.url:
                 try:
                     data = await response.json()
-                    if isinstance(data, dict) and "rows" in data:
+                    if isinstance(data, dict) and "rows" in data and data["rows"]:
+                        extracted_signings.clear() # Сохраняем только самый свежий массив данных
                         extracted_signings.extend(data["rows"])
                 except: pass
             elif "api_trades" in response.url:
                 try:
                     data = await response.json()
-                    if isinstance(data, dict) and "rows" in data:
+                    if isinstance(data, dict) and "rows" in data and data["rows"]:
+                        trades.clear()
                         for row in data["rows"]:
                             html_text = row.get("details_nolinks", "")
                             clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
@@ -167,30 +169,31 @@ async def main():
 
         page.on("response", on_response)
         
-        # --- 1. СТРАНИЦА ПОДПИСАНИЙ ---
+        # --- 1. ЗАГРУЗКА ПОДПИСАНИЙ (БЕЗ ОЖИДАНИЯ СЕЛЕКТОРОВ) ---
+        print("Загрузка страницы подписаний...")
         try:
-            # Ждем только базовый DOM (HTML структуру), не дожидаясь фоновых скриптов счетчиков
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Ждем конкретно загрузку строк таблицы Vue (сигнал, что API отдал данные)
-            await page.wait_for_selector('table.pp_table2 tbody tr', timeout=30000)
-            await asyncio.sleep(2) # Даем полсекунды на отработку обработчика on_response
+            await page.goto("https://puckpedia.com/signings", wait_until="commit", timeout=30000)
+            # Просто ждем 12 секунд. За это время браузер сделает запрос и on_response перехватит JSON,
+            # даже если сама таблица Vue не сможет отрендериться из-за блокировки скриптов.
+            await asyncio.sleep(12)
         except Exception as e:
-            print(f"Предупреждение по подписаниям: {e}")
+            print(f"Лог перехода подписаний: {e}")
             
-        # --- 2. СТРАНИЦА ТРЕЙДОВ ---
+        # --- 2. ЗАГРУЗКА ТРЕЙДОВ (БЕЗ ОЖИДАНИЯ СЕЛЕКТОРОВ) ---
+        print("Загрузка страницы трейдов...")
         try:
-            # Точно так же уходим от бесконечного ожидания сетевого штиля
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=30000)
-            await asyncio.sleep(2)
+            await page.goto("https://puckpedia.com/trades", wait_until="commit", timeout=30000)
+            await asyncio.sleep(12)
         except Exception as e:
-            print(f"Предупреждение по трейдам: {e}")
+            print(f"Лог перехода трейдов: {e}")
         
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались через браузер. Операция прервана.")
+        print("Внимание: Никакие данные не собрались из сетевых ответов. Операция прервана.")
         return
+
+    print(f"Успешно поймали событий из сети. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
 
     # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
     s_list = []
