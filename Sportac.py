@@ -4,7 +4,7 @@ import re
 import subprocess
 import requests
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async  # 1. Добавлен импорт
+import playwright_stealth
 
 # --- НАСТРОЙКИ ---
 TEAM_MAPPING = {
@@ -84,7 +84,8 @@ async def main():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
-        await stealth_async(page)  # 2. Активация маскировки
+        # Активация маскировки через модуль
+        await playwright_stealth.stealth_async(page)
         
         print("Загрузка подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
@@ -129,6 +130,8 @@ async def main():
         if token and chat_id:
             requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={"chat_id": chat_id, "text": msg})
         save_to_cache_and_commit(current_sig)
+    else:
+        print("Новых данных нет.")
 
 if __name__ == "__main__":
     asyncio.run(main())
