@@ -1,7 +1,6 @@
 import asyncio
 import os
 import re
-import json
 import subprocess
 import requests
 from playwright.async_api import async_playwright
@@ -71,11 +70,10 @@ def save_to_cache_and_commit(new_signature):
             subprocess.run(["git", "add", CACHE_FILE], check=True)
             status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
             if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
+                subprocess.run(["git", "commit", "-m", "Обновление кэша событий [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
-                print("Кэш успешно сохранен в репозиторий GitHub.")
         except Exception as e:
-            print(f"Не удалось сохранить кэш в Git: {e}")
+            print(f"Ошибка сохранения в Git: {e}")
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -88,10 +86,8 @@ def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
     chat_id = os.environ.get("TG_CHAT_ID")
     if not token or not chat_id: return
-    
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    max_len = 3500
-    parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
+    parts = [text[i:i+3500] for i in range(0, len(text), 3500)]
     for part in parts:
         try:
             requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
@@ -99,172 +95,73 @@ def send_to_telegram(text):
             print(f"Ошибка отправки: {e}")
 
 def get_team_abbr(team_name_raw):
-    if not team_name_raw: return ""
     clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
     for team_key, abbr in TEAM_MAPPING.items():
         if team_key in clean_name: return f"({abbr})"
     return f"({clean_name[:3].upper()})"
 
-def format_years(years_raw):
-    try:
-        years = int(re.sub(r'[^0-9]', '', str(years_raw)))
-    except:
-        return "на срок"
-    if years == 1: return "на 1 год"
-    elif 2 <= years <= 4: return f"на {years} года"
-    else: return f"на {years} лет"
-
-def format_cap_hit(val_raw):
-    try:
-        clean_val = int(re.sub(r'[^0-9]', '', str(val_raw)))
-        return f"${clean_val:,}"
-    except:
-        return f"${val_raw}"
-
-def translate_trade(text):
-    if "forfeit" in text.lower(): return text
-    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
-    match = re.search(pattern, text)
-    if match:
-        team1, p1, team2, p2 = match.groups()
-        rus_team1_data = get_rus_team_data(team1)
-        rus_team2_data = get_rus_team_data(team2)
-        
-        p1 = p1.replace(".", "").replace(" and ", " и ")
-        p2 = p2.replace(".", "").replace(" and ", " и ")
-        
-        return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
-    return text
-
 async def main():
     extracted_signings = []
     trades = []
-
+    
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-        page = await context.new_page()
+        page = await browser.new_page()
         
-        # --- СБОР ПОДПИСАНИЙ ---
-        print("Загрузка страницы подписаний...")
-        try:
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Ждем только базовый селектор таблицы без капризных двоеточий
-            await page.wait_for_selector('table.pp_table2 tbody tr', timeout=25000)
-        except Exception as e:
-            print(f"Предупреждение по подписаниям: {e}")
-
-        # Сбор данных напрямую из DOM через JS
+        # Сбор подписаний
+        print("Загрузка подписаний...")
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
+        await asyncio.sleep(8)
+        
         extracted_signings = await page.evaluate('''() => {
-            // Ищем tr, у которых есть любой атрибут, содержащий слово 'key' и значение 'x.cid'
-            let rows = Array.from(document.querySelectorAll('tr')).filter(tr => {
-                return tr.getAttributeNames().some(a => a.includes('key') && tr.getAttribute(a) === 'x.cid');
-            });
-            
-            // Запасной план: если vue-атрибут не найден, берем любые строки таблицы
-            if (rows.length === 0) {
-                rows = Array.from(document.querySelectorAll('table.pp_table2 tbody tr'));
-            }
-            
-            return rows.slice(0, 5).map(tr => {
-                const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
-                const parts = nameText.trim().split(' ');
-                
-                // Название команды берем строго из логотипа/атрибута ссылки в начале строки (его собственной команды)
-                const teamImg = tr.querySelector('td:nth-child(2) img');
-                const teamName = teamImg ? (teamImg.getAttribute('alt') || teamImg.getAttribute('title') || '') : '';
-                
+            const container = document.querySelector('div.flex-1.mt-3.lg\\:mt-0');
+            const rows = container ? Array.from(container.querySelectorAll('tr')) : Array.from(document.querySelectorAll('tr'));
+            return rows.filter(tr => tr.innerText.includes('$')).slice(0, 5).map(tr => {
                 const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
-                const typeText = cells.find(txt => txt.toLowerCase().includes('extension')) || '';
-                
                 return {
-                    p_fn: parts[0] || '',
-                    p_ln: parts.slice(1).join(' ') || '',
-                    team_name: teamName || tr.querySelector('td:nth-child(2)')?.innerText || '',
-                    cval: tr.querySelector('td:nth-child(3)')?.innerText || '0',
-                    len: tr.querySelector('td:nth-child(4)')?.innerText || '1',
-                    lvl: tr.querySelector('td:nth-child(5)')?.innerText || '',
-                    type_name: typeText
+                    name: tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || 'Unknown',
+                    team: cells[1] || '',
+                    cval: cells[2] || '0',
+                    len: cells[3] || '1',
+                    lvl: cells[4] || '',
+                    type: cells[5] || ''
                 };
             });
         }''')
 
-        # --- СБОР ТРЕЙДОВ ---
-        print("Загрузка страницы трейдов...")
-        try:
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=25000)
-        except Exception as e:
-            print(f"Предупреждение по трейдам: {e}")
+        # Сбор трейдов
+        print("Загрузка трейдов...")
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
+        await asyncio.sleep(8)
         
-        all_trades = await page.evaluate('''() => {
-            const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
-            return blocks.map(el => el.innerText.trim());
+        trades = await page.evaluate('''() => {
+            return Array.from(document.querySelectorAll('*'))
+                .filter(el => el.getAttribute('x-html') === 'row.details_nolinks')
+                .map(el => el.innerText.trim());
         }''')
-        
-        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались из HTML структуры. Операция прервана.")
+        print("Данные не найдены.")
         return
 
-    print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
-
-    # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
-    s_list = []
-    current_signature_elements = []
-
-    for item in extracted_signings[:3]:
-        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
-        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
-        name = f"{first_name} {last_name}".strip()
-        if not name: continue
-        
-        current_signature_elements.append(name)
-        
-        lvl = str(item.get("lvl", "")).upper()
-        raw_cval = str(item.get('cval', 0) or 0)
-        try:
-            total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
-        except:
-            total_val = 0
-            
-        years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
-        cap_val = total_val / years if "ELC" in lvl else total_val
-        
-        raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type or "продл" in raw_type:
-            ctype = "продлил контракт"
-        else:
-            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-            
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
-        s_list.append(line)
-        
-    seen = set()
-    unique_trades = []
-    for t in trades:
-        if t not in seen:
-            seen.add(t)
-            unique_trades.append(t)
-
-    t_list = unique_trades[:3]
-    for t in t_list:
-        current_signature_elements.append(t[:50])
-
-    current_signature = "|".join(current_signature_elements)
-    last_cached_signature = get_last_cached_signature()
-
-    if current_signature == last_cached_signature:
-        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки дубликатов.")
-        return
+    # Формирование сообщения
+    lines = []
+    current_sig = []
     
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
+    for s in extracted_signings:
+        line = f"{s['name']} - {s['cval']} на {s['len']} года {get_team_abbr(s['team'])}"
+        lines.append(line)
+        current_sig.append(s['name'])
+        
+    trade_lines = [t for t in trades if len(t) > 20][:3]
     
-    send_to_telegram(message)
-    save_to_cache_and_commit(current_signature)
+    msg = "🔥 ПОДПИСАНИЯ:\n" + "\n".join(lines) + "\n\n🤝 ТРЕЙДЫ:\n" + "\n".join(trade_lines)
+    
+    if "|".join(current_sig) != get_last_cached_signature():
+        send_to_telegram(msg)
+        save_to_cache_and_commit("|".join(current_sig))
 
 if __name__ == "__main__":
     asyncio.run(main())
