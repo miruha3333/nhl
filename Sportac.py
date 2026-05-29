@@ -149,24 +149,20 @@ async def main():
         print("Загрузка страницы подписаний...")
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Ждем появления контейнера с указанными классами
-            await page.wait_for_selector('div.flex-1.mt-3.lg\\:mt-0', timeout=20000)
+            await page.wait_for_selector('tr[\\:key="x.cid"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
+        # Сбор с использованием блока, который вы указали, через поиск по атрибутам
         extracted_signings = await page.evaluate('''() => {
-            // Ищем контейнер по классам
-            const container = document.querySelector('div.flex-1.mt-3.lg\\:mt-0');
-            if (!container) return [];
+            // Ищем контейнер с вашими классами, используя querySelector с экранированным двоеточием
+            const container = document.querySelector('div.flex-1.mt-3.lg\\\\:mt-0');
+            const rows = container ? Array.from(container.querySelectorAll('tr')) : Array.from(document.querySelectorAll('tr[\\\\:key="x.cid"]'));
             
-            // Ищем строки внутри этого контейнера (предполагаем, что данные в таблицах)
-            const rows = Array.from(container.querySelectorAll('tr'));
             return rows.filter(tr => tr.innerText.includes('$')).slice(0, 5).map(tr => {
-                const cells = Array.from(tr.querySelectorAll('td'));
-                if (cells.length < 3) return null;
-                
                 const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
                 const parts = nameText.trim().split(' ');
+                const cells = Array.from(tr.querySelectorAll('td'));
                 
                 return {
                     p_fn: parts[0] || '',
@@ -177,7 +173,7 @@ async def main():
                     lvl: cells[4]?.innerText || '',
                     type_name: cells.map(c => c.innerText.toLowerCase()).join(' ')
                 };
-            }).filter(item => item !== null);
+            });
         }''')
 
         # --- СБОР ТРЕЙДОВ ---
