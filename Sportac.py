@@ -69,7 +69,6 @@ def save_to_cache_and_commit(new_signature):
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
             subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
             subprocess.run(["git", "add", CACHE_FILE], check=True)
-            
             status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
             if status.stdout.strip():
                 subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
@@ -146,54 +145,61 @@ async def main():
         context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
         page = await context.new_page()
         
-        # Перехват ответов API
-        async def on_response(response):
-            if "api_signings" in response.url:
-                try:
-                    data = await response.json()
-                    if isinstance(data, dict) and "rows" in data and data["rows"]:
-                        extracted_signings.clear() # Сохраняем только самый свежий массив данных
-                        extracted_signings.extend(data["rows"])
-                except: pass
-            elif "api_trades" in response.url:
-                try:
-                    data = await response.json()
-                    if isinstance(data, dict) and "rows" in data and data["rows"]:
-                        trades.clear()
-                        for row in data["rows"]:
-                            html_text = row.get("details_nolinks", "")
-                            clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
-                            if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
-                                trades.append(translate_trade(clean_text))
-                except: pass
-
-        page.on("response", on_response)
-        
-        # --- 1. ЗАГРУЗКА ПОДПИСАНИЙ (БЕЗ ОЖИДАНИЯ СЕЛЕКТОРОВ) ---
+        # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            await page.goto("https://puckpedia.com/signings", wait_until="commit", timeout=30000)
-            # Просто ждем 12 секунд. За это время браузер сделает запрос и on_response перехватит JSON,
-            # даже если сама таблица Vue не сможет отрендериться из-за блокировки скриптов.
-            await asyncio.sleep(12)
+            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
+            # Чтобы избежать падения по таймауту, используем явное ожидание появления tr с нужным атрибутом через корректный CSS-селектор
+            await page.wait_for_selector('tr[\\:key="x.cid"]', timeout=20000)
         except Exception as e:
-            print(f"Лог перехода подписаний: {e}")
-            
-        # --- 2. ЗАГРУЗКА ТРЕЙДОВ (БЕЗ ОЖИДАНИЯ СЕЛЕКТОРОВ) ---
+            print(f"Предупреждение по подписаниям: {e}")
+
+        # Собираем данные прямо из структуры tr :key="x.cid"
+        extracted_signings = await page.evaluate('''() => {
+            const rows = Array.from(document.querySelectorAll('tr[\\\\:key="x.cid"]'));
+            return rows.slice(0, 5).map(tr => {
+                const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
+                const parts = nameText.trim().split(' ');
+                
+                // Проверяем тип контракта в ячейках, ищем упоминание Extension
+                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
+                const typeText = cells.find(txt => txt.toLowerCase().includes('extension')) || '';
+                
+                return {
+                    p_fn: parts[0] || '',
+                    p_ln: parts.slice(1).join(' ') || '',
+                    team_name: tr.querySelector('td:nth-child(2)')?.innerText || '',
+                    cval: tr.querySelector('td:nth-child(3)')?.innerText || '0',
+                    len: tr.querySelector('td:nth-child(4)')?.innerText || '1',
+                    lvl: tr.querySelector('td:nth-child(5)')?.innerText || '',
+                    type_name: typeText
+                };
+            });
+        }''')
+
+        # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
         try:
-            await page.goto("https://puckpedia.com/trades", wait_until="commit", timeout=30000)
-            await asyncio.sleep(12)
+            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
+            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
         except Exception as e:
-            print(f"Лог перехода трейдов: {e}")
+            print(f"Предупреждение по трейдам: {e}")
+        
+        # Точечно вытаскиваем текст трейда из блоков div x-html="row.details_nolinks"
+        all_trades = await page.evaluate('''() => {
+            const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
+            return blocks.map(el => el.innerText.trim());
+        }''')
+        
+        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались из сетевых ответов. Операция прервана.")
+        print("Внимание: Никакие данные не собрались из HTML структуры. Операция прервана.")
         return
 
-    print(f"Успешно поймали событий из сети. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
+    print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
 
     # --- ФОРМИРОВАНИЕ ТЕКСТА И КЭШИРОВАНИЕ ---
     s_list = []
@@ -214,11 +220,11 @@ async def main():
         except:
             total_val = 0
             
-        years = int(item.get('len') or 1)
+        years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
         cap_val = total_val / years if "ELC" in lvl else total_val
         
         raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type:
+        if "extension" in raw_type or "продл" in raw_type:
             ctype = "продлил контракт"
         else:
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
@@ -226,7 +232,14 @@ async def main():
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
-    t_list = trades[:3]
+    seen = set()
+    unique_trades = []
+    for t in trades:
+        if t not in seen:
+            seen.add(t)
+            unique_trades.append(t)
+
+    t_list = unique_trades[:3]
     for t in t_list:
         current_signature_elements.append(t[:50])
 
