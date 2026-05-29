@@ -142,21 +142,42 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        
+        # ЯВНО ЗАДАЕМ ДЕСКТОПНОЕ РАЗРЕШЕНИЕ (1920x1080)
+        # Иначе классы lg: (large screen) могут вообще не отрендериться фреймворком
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
+        )
         page = await context.new_page()
         
         # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
+            # networkidle: ждем, пока прекратятся все сетевые API запросы (загрузка динамики)
+            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
             
-            # Ждем появления ссылки на игрока, чтобы убедиться, что контент подгружен
-            await page.wait_for_selector('a[href*="/player/"]', timeout=20000)
+            # Скроллим страницу на случай, если там стоит ленивая загрузка
+            await page.evaluate("window.scrollBy(0, 800)")
+            
+            # Даем скриптам 3 секунды, чтобы раскидать данные API по HTML-тегам
+            await asyncio.sleep(3)
+            
+            # Ждем появления нужного контейнера
+            await page.wait_for_function('''() => {
+                return Array.from(document.querySelectorAll('div')).some(el => 
+                    el.className && 
+                    typeof el.className === 'string' &&
+                    el.className.includes('items-start') && 
+                    el.className.includes('flex-col') && 
+                    el.className.includes('lg:flex-row')
+                );
+            }''', timeout=15000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
         extracted_signings = await page.evaluate('''() => {
-            // Ищем все контейнеры по указанному тобой классу
+            // Ищем все контейнеры по указанным тобой классам
             const blocks = Array.from(document.querySelectorAll('div')).filter(el => 
                 el.className && 
                 typeof el.className === 'string' &&
@@ -171,17 +192,23 @@ async def main():
             
             for (let container of blocks) {
                 // --- ИМЯ ИГРОКА ---
-                const nameLink = container.querySelector('a[href*="/player/"]');
-                if (!nameLink) continue; // Если имени нет, пропускаем
+                const nameLink = container.querySelector('a[href*="/player"]');
+                let nameText = '';
                 
-                const nameText = nameLink.innerText.trim();
-                if (!nameText || seenNames.has(nameText)) continue; // Защита от дублей
+                if (nameLink) {
+                    nameText = nameLink.innerText.trim();
+                } else {
+                    // Резерв: если ссылку убрали, ищем по жирному тексту или заголовку
+                    const boldText = container.querySelector('.font-bold, font-semibold, h2, h3, strong');
+                    if (boldText) nameText = boldText.innerText.trim();
+                }
                 
+                if (!nameText || seenNames.has(nameText)) continue;
                 seenNames.add(nameText);
                 const parts = nameText.split(' ');
                 
                 // --- КОМАНДА ---
-                const teamLink = container.querySelector('a[href*="/team/"], a[href*="/teams/"]');
+                const teamLink = container.querySelector('a[href*="/team"]');
                 let team_name = '';
                 if (teamLink) {
                     team_name = teamLink.innerText.trim();
@@ -196,11 +223,10 @@ async def main():
                 let type_name = '';
                 let lvl = '';
                 
-                // Используем безопасный разделитель (перенос строки) для разделения параметров
                 const rawText = container.innerText || '';
                 const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
                 
-                // Читаем значения "Заголовок" -> следующая строка "Значение"
+                // Проходимся по строкам. Значение обычно идет сразу под заголовком
                 for (let i = 0; i < lines.length; i++) {
                     const lowerLine = lines[i].toLowerCase();
                     if (lowerLine === 'length' && lines[i+1]) {
