@@ -116,7 +116,7 @@ def format_years(years_raw):
 
 def format_cap_hit(val_raw):
     try:
-        # Переводим в float, а затем в int, чтобы убрать копейки и избежать склеивания с нулем
+        # Решение проблемы лишнего нуля! 1002500.0 сначала конвертируется в float, а затем в int (1002500)
         clean_val = int(float(val_raw))
         return f"${clean_val:,}"
     except:
@@ -144,7 +144,7 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         
-        # Десктопное разрешение для рендеринга классов lg:
+        # Десктопное разрешение
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
@@ -154,23 +154,25 @@ async def main():
         # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            # domcontentloaded - работает быстро и не ждет бесконечной загрузки рекламы
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=30000)
-            
-            # Небольшой скролл для активации прогрузки (lazy-load)
+            # domcontentloaded - работает быстрее и надежнее
+            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
             await page.evaluate("window.scrollBy(0, 800)")
+            await asyncio.sleep(3)
             
-            # Просто ждем, пока на странице появятся ссылки на игроков
-            await page.wait_for_selector('a[href*="/player"]', timeout=15000)
-            
-            # Даем скриптам сайта еще пару секунд, чтобы они точно расставили все классы
-            await asyncio.sleep(2)
+            # Возвращаем работавший метод ожидания (поиск контейнера по классам)
+            await page.wait_for_function('''() => {
+                return Array.from(document.querySelectorAll('div')).some(el => 
+                    el.className && 
+                    typeof el.className === 'string' &&
+                    el.className.includes('items-start') && 
+                    el.className.includes('flex-col') && 
+                    el.className.includes('lg:flex-row')
+                );
+            }''', timeout=15000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Сбор данных с помощью JavaScript
-        extracted_signings = await page.evaluate("""() => {
-            // Ищем контейнеры с нужными классами
+        extracted_signings = await page.evaluate('''() => {
             const blocks = Array.from(document.querySelectorAll('div')).filter(el => 
                 el.className && 
                 typeof el.className === 'string' &&
@@ -184,8 +186,8 @@ async def main():
             let seenNames = new Set();
             
             for (let container of blocks) {
-                // --- ИМЯ ИГРОКА ---
-                const nameLink = container.querySelector('a[href*="/player"]');
+                // Ищем ссылку именно на профиль игрока (со слешем на конце)
+                const nameLink = container.querySelector('a[href*="/player/"]');
                 let nameText = '';
                 
                 if (nameLink) {
@@ -216,9 +218,9 @@ async def main():
                 let lvl = '';
                 
                 const rawText = container.innerText || '';
-                // Разбиваем текст по переносам строк, чтобы читать пары "Ключ" -> "Значение"
                 const lines = rawText.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l);
                 
+                // Поиск параметров с учетом слова TERM вместо LENGTH
                 for (let i = 0; i < lines.length; i++) {
                     const lowerLine = lines[i].toLowerCase();
                     if ((lowerLine === 'length' || lowerLine === 'term') && lines[i+1]) {
@@ -233,7 +235,6 @@ async def main():
                     }
                 }
 
-                // Запасной план: если текст сплошной, без переносов
                 if (len === '1' && cval === '0') {
                     const words = rawText.split(/\\s+/);
                     words.forEach((w, i) => {
@@ -260,20 +261,20 @@ async def main():
             }
             
             return results;
-        }""")
+        }''')
 
         # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
         try:
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=15000)
+            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
+            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
-        all_trades = await page.evaluate("""() => {
+        all_trades = await page.evaluate('''() => {
             const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
             return blocks.map(el => el.innerText.trim());
-        }""")
+        }''')
         
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         
@@ -301,14 +302,18 @@ async def main():
         
         raw_cval = str(item.get('cval', 0) or 0)
         try:
+            # Очищаем от мусора, оставляем только цифры и точку
             clean_cval = re.sub(r'[^0-9.]', '', raw_cval)
+            if not clean_cval: clean_cval = "0"
+            
             if 'm' in raw_cval.lower() or 'м' in raw_cval.lower():
                 total_val = float(clean_cval) * 1000000
             else:
-                total_val = float(clean_cval) if clean_cval else 0
+                total_val = float(clean_cval)
         except:
             total_val = 0
             
+        # Надежное извлечение срока контракта из строк вроде "3yr"
         raw_len = str(item.get('len', '1'))
         try:
             years_match = re.search(r'\d+', raw_len)
@@ -316,7 +321,7 @@ async def main():
         except:
             years = 1
             
-        # Используем значение напрямую (без деления), так как сайт отдает готовый CAP HIT
+        # Мы берем значение CAP HIT напрямую, делить на срок не нужно
         cap_val = total_val
         
         raw_type = str(item.get('type_name', '')).lower()
