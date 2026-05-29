@@ -149,30 +149,35 @@ async def main():
         print("Загрузка страницы подписаний...")
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Чтобы избежать падения по таймауту, используем явное ожидание появления tr с нужным атрибутом через корректный CSS-селектор
-            await page.wait_for_selector('tr[\\:key="x.cid"]', timeout=20000)
+            # Ожидаем появления контейнера с данными
+            await page.wait_for_selector('div.grid-cols-3', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Собираем данные прямо из структуры tr :key="x.cid"
         extracted_signings = await page.evaluate('''() => {
-            const rows = Array.from(document.querySelectorAll('tr[\\\\:key="x.cid"]'));
-            return rows.slice(0, 5).map(tr => {
-                const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
+            // Ищем строки, которые содержат информацию об игроке
+            const rows = Array.from(document.querySelectorAll('div.border-b.border-gray-200'));
+            return rows.slice(0, 5).map(row => {
+                // Извлекаем имя из заголовка или ссылки
+                const nameText = row.querySelector('a')?.innerText || '';
                 const parts = nameText.trim().split(' ');
                 
-                // Проверяем тип контракта в ячейках, ищем упоминание Extension
-                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
-                const typeText = cells.find(txt => txt.toLowerCase().includes('extension')) || '';
+                // Ищем блок с данными: ищем все элементы в grid-cols-3
+                const dataCells = Array.from(row.querySelectorAll('div.grid-cols-3 > div'));
+                // Обычно текст команды, суммы и т.д. находятся в определенных позициях
+                // На основе структуры PuckPedia:
+                const team = dataCells[0]?.innerText || '';
+                const cval = dataCells[1]?.innerText || '0';
+                const len = dataCells[2]?.innerText || '1';
                 
                 return {
                     p_fn: parts[0] || '',
                     p_ln: parts.slice(1).join(' ') || '',
-                    team_name: tr.querySelector('td:nth-child(2)')?.innerText || '',
-                    cval: tr.querySelector('td:nth-child(3)')?.innerText || '0',
-                    len: tr.querySelector('td:nth-child(4)')?.innerText || '1',
-                    lvl: tr.querySelector('td:nth-child(5)')?.innerText || '',
-                    type_name: typeText
+                    team_name: team,
+                    cval: cval,
+                    len: len,
+                    lvl: '',
+                    type_name: ''
                 };
             });
         }''')
@@ -185,7 +190,6 @@ async def main():
         except Exception as e:
             print(f"Предупреждение по трейдам: {e}")
         
-        # Точечно вытаскиваем текст трейда из блоков div x-html="row.details_nolinks"
         all_trades = await page.evaluate('''() => {
             const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
             return blocks.map(el => el.innerText.trim());
@@ -223,11 +227,7 @@ async def main():
         years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
         cap_val = total_val / years if "ELC" in lvl else total_val
         
-        raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type or "продл" in raw_type:
-            ctype = "продлил контракт"
-        else:
-            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
+        ctype = "подписал контракт"
             
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
