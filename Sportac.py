@@ -54,14 +54,12 @@ RUS_TEAM_MAPPING = {
 CACHE_FILE = "last_data_cache.txt"
 
 def get_last_cached_signature():
-    """Читает сохраненный отпечаток прошлого поста из файла."""
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     return ""
 
 def save_to_cache_and_commit(new_signature):
-    """Сохраняет новый отпечаток в файл и пушит его в репозиторий GitHub."""
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         f.write(new_signature)
     
@@ -139,7 +137,6 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        # Маскировка контекста под реального пользователя
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             locale="en-US",
@@ -164,13 +161,14 @@ async def main():
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
-        # Безопасный селектор tr (без двоеточий)
+        # Исправленный селектор таблицы (без лишних классов сортировки)
         if not extracted_signings:
             extracted_signings = await page.evaluate('''() => {
-                const rows = Array.from(document.querySelectorAll('table.pp_table2.stickycol.sortDesc tbody tr'));
+                const rows = Array.from(document.querySelectorAll('table.pp_table2 tbody tr'));
                 return rows.slice(0, 3).map(tr => {
-                    const linkSpan = tr.querySelector('.pp_link span')?.innerText || '';
-                    const nameParts = linkSpan.trim().split(' ');
+                    const firstCell = tr.querySelector('td:first-child');
+                    const linkSpan = firstCell ? firstCell.innerText.trim() : '';
+                    const nameParts = linkSpan.split(' ');
                     return {
                         p_fn: nameParts[0] || '',
                         p_ln: nameParts.slice(1).join(' ') || '',
@@ -194,10 +192,8 @@ async def main():
         
         await browser.close()
 
-    # --- ЗАЩИТА ОТ ПУСТЫХ ДАННЫХ ---
-    # Если сайт выдал пустоту из-за блокировки Cloudflare, завершаем работу, чтобы не слать пустой пост
     if not extracted_signings and not trades:
-        print("Внимание: Не удалось получить данные с сайта (возможно, блокировка Cloudflare). Отмена операции.")
+        print("Внимание: Данные вообще не собрались. Отмена операции.")
         return
 
     # --- ФОРМИРОВАНИЕ ---
@@ -206,6 +202,8 @@ async def main():
 
     for item in extracted_signings[:3]:
         name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
+        if not name: continue
+        
         current_signature_elements.append(name)
         
         lvl = str(item.get("lvl", "")).upper()
