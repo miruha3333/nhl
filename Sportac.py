@@ -1,8 +1,9 @@
 import asyncio
 import os
 import re
-import requests
 import subprocess
+# ИСПОЛЬЗУЕМ КУРЛ-ИМИТАТОР БРАУЗЕРА
+from curl_cffi import requests
 
 # --- НАСТРОЙКИ ---
 TEAM_MAPPING = {
@@ -52,13 +53,15 @@ RUS_TEAM_MAPPING = {
 
 CACHE_FILE = "last_data_cache.txt"
 
-# Качественные заголовки для маскировки под реального пользователя
+# Качественные заголовки
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
     "Origin": "https://puckpedia.com",
-    "Referer": "https://puckpedia.com/"
+    "Referer": "https://puckpedia.com/",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin"
 }
 
 def get_last_cached_signature():
@@ -97,12 +100,14 @@ def send_to_telegram(text):
     chat_id = os.environ.get("TG_CHAT_ID")
     if not token or not chat_id: return
     
+    # Для отправки в ТГ используем обычный requests, телеграм нас не блочит
+    import requests as tg_req
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     max_len = 3500
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
         try:
-            requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
+            tg_req.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
         except Exception as e:
             print(f"Ошибка отправки: {e}")
 
@@ -143,38 +148,38 @@ async def main():
     extracted_signings = []
     trades = []
 
-    # --- ЧИСТЫЙ API СБОР ПОДПИСАНИЙ ---
+    # --- ИМИТАЦИЯ БРАУЗЕРА ХРОМ ЧЕРЕЗ API ПОДПИСАНИЙ ---
     try:
-        # Дергаем прямую ручку АПИ, которую сайт использует для вывода таблицы подписаний
         signings_api_url = "https://puckpedia.com/api/api_signings?sort=date&direction=desc"
-        res = requests.get(signings_api_url, headers=HEADERS, timeout=15)
+        res = requests.get(signings_api_url, headers=HEADERS, impersonate="chrome", timeout=15)
         if res.status_code == 200:
             data = res.json()
             if isinstance(data, dict) and "data" in data and "p" in data["data"]:
                 extracted_signings = data["data"]["p"]
+        else:
+            print(f"АПИ подписаний вернул статус: {res.status_code}")
     except Exception as e:
         print(f"Ошибка запроса АПИ подписаний: {e}")
 
-    # --- ЧИСТЫЙ API СБОР ТРЕЙДОВ ---
+    # --- ИМИТАЦИЯ БРАУЗЕРА ХРОМ ЧЕРЕЗ API ТРЕЙДОВ ---
     try:
-        # Дергаем прямую ручку АПИ для таблицы обменов
         trades_api_url = "https://puckpedia.com/api/api_trades?sort=date&direction=desc"
-        res = requests.get(trades_api_url, headers=HEADERS, timeout=15)
+        res = requests.get(trades_api_url, headers=HEADERS, impersonate="chrome", timeout=15)
         if res.status_code == 200:
             data = res.json()
-            # Трейды на PuckPedia приходят строками с HTML-тегами внутри "details_nolinks"
             if isinstance(data, dict) and "rows" in data:
                 for row in data["rows"]:
                     html_text = row.get("details_nolinks", "")
-                    # Очищаем текст от HTML тегов <a> и <span>
                     clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
                     if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
                         trades.append(translate_trade(clean_text))
+        else:
+            print(f"АПИ трейдов вернул статус: {res.status_code}")
     except Exception as e:
         print(f"Ошибка запроса АПИ трейдов: {e}")
 
     if not extracted_signings and not trades:
-        print("Внимание: Данные через API вообще не собрались. Отмена операции.")
+        print("Внимание: Данные через имитатор curl_cffi вообще не собрались. Отмена операции.")
         return
 
     # --- ФОРМИРОВАНИЕ ---
