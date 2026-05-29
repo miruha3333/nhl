@@ -1,9 +1,8 @@
 import asyncio
 import os
 import re
-import json
-import subprocess
-from curl_cffi import requests
+import requests
+from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
 TEAM_MAPPING = {
@@ -51,40 +50,6 @@ RUS_TEAM_MAPPING = {
     'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
 }
 
-CACHE_FILE = "last_data_cache.txt"
-
-# Имитируем чистый AJAX/Fetch запрос от браузера
-HEADERS = {
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Origin": "https://puckpedia.com",
-    "Referer": "https://puckpedia.com/signings"
-}
-
-def get_last_cached_signature():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return ""
-
-def save_to_cache_and_commit(new_signature):
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        f.write(new_signature)
-    
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", CACHE_FILE], check=True)
-            
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-                print("Кэш успешно сохранен в репозиторий GitHub.")
-        except Exception as e:
-            print(f"Не удалось сохранить кэш в Git: {e}")
-
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
     for key, value in RUS_TEAM_MAPPING.items():
@@ -97,39 +62,32 @@ def send_to_telegram(text):
     chat_id = os.environ.get("TG_CHAT_ID")
     if not token or not chat_id: return
     
-    import requests as tg_req
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     max_len = 3500
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
         try:
-            tg_req.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
+            requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
         except Exception as e:
-            print(f"Ошибка отправки сообщения: {e}")
+            print(f"Ошибка отправки: {e}")
 
 def get_team_abbr(team_name_raw):
     if not team_name_raw: return ""
-    # Если внутри названия команды зашит HTML (например, логотип/картинка), очищаем его
-    clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
+    name = str(team_name_raw).lower().strip()
     for team_key, abbr in TEAM_MAPPING.items():
-        if team_key in clean_name: return f"({abbr})"
-    return f"({clean_name[:3].upper()})"
+        if team_key in name: return f"({abbr})"
+    return f"({name[:3].upper()})"
 
 def format_years(years_raw):
-    try:
-        years = int(re.sub(r'[^0-9]', '', str(years_raw)))
-    except:
-        return "на срок"
+    try: years = int(years_raw)
+    except: return "на срок"
     if years == 1: return "на 1 год"
     elif 2 <= years <= 4: return f"на {years} года"
     else: return f"на {years} лет"
 
 def format_cap_hit(val_raw):
-    try:
-        clean_val = int(re.sub(r'[^0-9]', '', str(val_raw)))
-        return f"${clean_val:,}"
-    except:
-        return f"${val_raw}"
+    try: return f"${int(val_raw):,}"
+    except: return f"${val_raw}"
 
 def translate_trade(text):
     if "forfeit" in text.lower(): return text
@@ -150,94 +108,73 @@ async def main():
     extracted_signings = []
     trades = []
 
-    # Строки параметров запросов, которые ты вытащил из вкладки Network
-    signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-    trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-
-    # --- 1. СБОР ПОДПИСАНИЙ ИЗ ОФИЦИАЛЬНОГО JSON API ---
-    try:
-        url = f"https://puckpedia.com/data/api_signings?q={signings_q}"
-        # curl_cffi идеально имитирует TLS-отпечаток Хрома, обходя Cloudflare на GitHub Actions
-        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=20)
-        if res.status_code == 200:
-            res_json = res.json()
-            if isinstance(res_json, dict) and "rows" in res_json:
-                extracted_signings = res_json["rows"]
-        else:
-            print(f"Ошибка API подписаний. Статус-код: {res.status_code}")
-    except Exception as e:
-        print(f"Исключение при выполнении запроса подписаний: {e}")
-
-    # --- 2. СБОР ТРЕЙДОВ ИЗ ОФИЦИАЛЬНОГО JSON API ---
-    try:
-        url = f"https://puckpedia.com/data/api_trades?q={trades_q}"
-        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=20)
-        if res.status_code == 200:
-            res_json = res.json()
-            if isinstance(res_json, dict) and "rows" in res_json:
-                for row in res_json["rows"]:
-                    html_text = row.get("details_nolinks", "")
-                    # Избавляемся от HTML-ссылок в тексте трейда
-                    clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
-                    if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
-                        trades.append(translate_trade(clean_text))
-        else:
-            print(f"Ошибка API трейдов. Статус-код: {res.status_code}")
-    except Exception as e:
-        print(f"Исключение при выполнении запроса трейдов: {e}")
-
-    if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались. Операция прервана.")
-        return
-
-    # --- СБОРКА И ПРОВЕРКА КЭША ---
-    s_list = []
-    current_signature_elements = []
-
-    # Обрабатываем 3 последних подписания
-    for item in extracted_signings[:3]:
-        # Получаем чистые имя и фамилию
-        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
-        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
-        name = f"{first_name} {last_name}".strip()
-        if not name: continue
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        page = await context.new_page()
         
-        current_signature_elements.append(name)
+        async def on_response(response):
+            if "api_signings" in response.url:
+                try:
+                    data = await response.json()
+                    if isinstance(data, dict):
+                        if "data" in data and "p" in data["data"]: extracted_signings.extend(data["data"]["p"])
+                        elif "rows" in data: extracted_signings.extend(data["rows"])
+                except: pass
+        page.on("response", on_response)
         
-        lvl = str(item.get("lvl", "")).upper()
-        
-        # Получаем чистое числовое значение контракта
-        raw_cval = str(item.get('cval', 0) or 0)
+        # --- СБОР ПОДПИСАНИЙ ---
         try:
-            total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
-        except:
-            total_val = 0
-            
+            # Используем networkidle для полной загрузки всех API-скриптов Vue
+            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
+            # Ждем появления строки таблицы с твоим Vue-атрибутом :key
+            await page.wait_for_selector('table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]', timeout=15000)
+        except Exception as e:
+            print(f"Предупреждение по подписаниям (возможно блокировка): {e}")
+
+        if not extracted_signings:
+            extracted_signings = await page.evaluate('''() => {
+                const selector = 'table.pp_table2.stickycol.sortDesc tbody tr[\\:key="x.cid"]';
+                return Array.from(document.querySelectorAll(selector)).slice(0, 3).map(tr => ({
+                    p_fn: tr.querySelector('.pp_link span')?.innerText.split(' ')[0] || '',
+                    p_ln: tr.querySelector('.pp_link span')?.innerText.split(' ')[1] || '',
+                    team_name: tr.querySelector('td:has([class*="sign_city"])')?.innerText || '',
+                    cval: tr.querySelector('td:has([class*="cap_hit"])')?.innerText.replace(/[^0-9]/g, '') || '0',
+                    len: tr.querySelector('td:has([class*="len"])')?.innerText || '1',
+                    lvl: tr.querySelector('td:has([class*="lvl"])')?.innerText || ''
+                }));
+            }''')
+        
+        # --- СБОР ТРЕЙДОВ ---
+        try:
+            await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=45000)
+            # Ждем появления элементов с деталями трейдов
+            await page.wait_for_selector('[x-html="row.details_nolinks"]', timeout=15000)
+        except Exception as e:
+            print(f"Предупреждение по трейдам (возможно блокировка): {e}")
+        
+        all_trades = await page.evaluate("""() => Array.from(document.querySelectorAll('[x-html="row.details_nolinks"]')).map(el => el.innerText.trim())""")
+        trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
+        
+        await browser.close()
+
+    # --- ФОРМИРОВАНИЕ ---
+    s_list = []
+    for item in extracted_signings[:3]:
+        name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
+        lvl = str(item.get("lvl", "")).upper()
+        total_val = float(item.get('cval', 0) or 0)
         years = int(item.get('len') or 1)
         cap_val = total_val / years if "ELC" in lvl else total_val
-        
         ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
-    # Обрабатываем 3 последних трейда
     t_list = trades[:3]
-    for t in t_list:
-        current_signature_elements.append(t[:50])
 
-    # Проверяем изменения по уникальному отпечатку (сигнатуре)
-    current_signature = "|".join(current_signature_elements)
-    last_cached_signature = get_last_cached_signature()
-
-    if current_signature == last_cached_signature:
-        print("Новых событий на сайте нет. Отмена отправки.")
-        return
-    
-    # Формируем и отправляем итоговое сообщение
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     
     send_to_telegram(message)
-    save_to_cache_and_commit(current_signature)
 
 if __name__ == "__main__":
     asyncio.run(main())
