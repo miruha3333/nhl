@@ -2,16 +2,10 @@ name: Run Hockey Parser
 
 on:
   schedule:
-    # 1. Дневной режим: каждые 4 часа с 8:00 до 17:00 по МСК/Киеву (с 5:00 до 14:00 UTC)
-    # Запуски в 05:00, 09:00, 13:00 UTC
     - cron: '0 5,9,13 * * *'
-
-    # 2. Ночной режим: каждые 2 часа с 17:30 до 7:00 по МСК/Киеву (с 14:30 до 4:00 UTC)
-    # Запуски на 30-й минуте каждого нужного часа
     - cron: '30 14,16,18,20,22,23 * * *'
     - cron: '30 0,2,4 * * *'
 
-  # Кнопка ручного запуска
   workflow_dispatch:
 
 jobs:
@@ -26,18 +20,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests playwright
-
-      - name: Install Playwright Chromium Browser
-        run: playwright install chromium
-
-      - name: Install Playwright Linux Dependencies
-        run: playwright install-deps chromium
+          pip install requests
 
       - name: Run parser script
         env:
