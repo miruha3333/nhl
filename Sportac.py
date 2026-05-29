@@ -73,7 +73,6 @@ def save_to_cache_and_commit(new_signature):
             if status.stdout.strip():
                 subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
-                print("Кэш успешно сохранен в репозиторий GitHub.")
         except Exception as e:
             print(f"Не удалось сохранить кэш в Git: {e}")
 
@@ -145,14 +144,11 @@ async def main():
         print("Загрузка страницы подписаний...")
         try:
             await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Ждем появления элементов, соответствующих структуре
             await page.wait_for_selector('div[class*="grid-cols-3"]', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
         extracted_signings = await page.evaluate('''() => {
-            // Ищем все блоки, которые являются строками (обычно обернуты в flex или grid)
-            // Ориентируемся на ваш специфический блок с множеством классов
             const blocks = Array.from(document.querySelectorAll('div[class*="grid-cols-3"]'));
             return blocks.map(block => {
                 const parent = block.closest('div.flex') || block.parentElement;
@@ -182,10 +178,6 @@ async def main():
         trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
         await browser.close()
 
-    if not extracted_signings and not trades:
-        print("Данные не собраны. Операция прервана.")
-        return
-
     # --- ФОРМИРОВАНИЕ ТЕКСТА ---
     s_list = []
     current_signature_elements = []
@@ -193,9 +185,15 @@ async def main():
     for item in extracted_signings[:3]:
         name = item['name']
         current_signature_elements.append(name)
-        val = re.sub(r'[^0-9]', '', item['cval'])
-        years = re.sub(r'[^0-9]', '', item['len']) or '1'
-        cap = int(val) / int(years) if int(years) > 0 else int(val)
+        
+        # БЕЗОПАСНОЕ ПАРСИНГ ЧИСЕЛ
+        raw_val = re.sub(r'[^0-9]', '', str(item['cval']))
+        raw_len = re.sub(r'[^0-9]', '', str(item['len']))
+        
+        val = int(raw_val) if raw_val else 0
+        years = int(raw_len) if raw_len else 1
+        
+        cap = val / years if years > 0 else val
         
         line = f"{name} подписал контракт {format_years(years)} с кэпхитом {format_cap_hit(cap)} {get_team_abbr(item['team'])}"
         s_list.append(line)
@@ -210,9 +208,10 @@ async def main():
     if current_signature == get_last_cached_signature():
         return
     
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join(s_list)}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join(t_list)}"
-    send_to_telegram(message)
-    save_to_cache_and_commit(current_signature)
+    if s_list or t_list:
+        message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join(s_list)}\n\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join(t_list)}"
+        send_to_telegram(message)
+        save_to_cache_and_commit(current_signature)
 
 if __name__ == "__main__":
     asyncio.run(main())
