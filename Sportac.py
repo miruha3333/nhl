@@ -1,8 +1,8 @@
 import asyncio
 import os
 import re
+import json
 import subprocess
-# ИСПОЛЬЗУЕМ КУРЛ-ИМИТАТОР БРАУЗЕРА
 from curl_cffi import requests
 
 # --- НАСТРОЙКИ ---
@@ -48,20 +48,16 @@ RUS_TEAM_MAPPING = {
     'Seattle Kraken': {'main': 'Сиэттл обменял', 'from': 'из Сиэттла'},
     'Utah Mammoth': {'main': 'Юта обменяла', 'from': 'из Юты'},
     'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
-    'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
+    'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из [Виннипега]'}
 }
 
 CACHE_FILE = "last_data_cache.txt"
 
-# Качественные заголовки
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
     "Origin": "https://puckpedia.com",
-    "Referer": "https://puckpedia.com/",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin"
+    "Referer": "https://puckpedia.com/signings"
 }
 
 def get_last_cached_signature():
@@ -100,7 +96,6 @@ def send_to_telegram(text):
     chat_id = os.environ.get("TG_CHAT_ID")
     if not token or not chat_id: return
     
-    # Для отправки в ТГ используем обычный requests, телеграм нас не блочит
     import requests as tg_req
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     max_len = 3500
@@ -126,8 +121,11 @@ def format_years(years_raw):
     else: return f"на {years} лет"
 
 def format_cap_hit(val_raw):
-    try: return f"${int(val_raw):,}"
-    except: return f"${val_raw}"
+    try:
+        clean_val = int(re.sub(r'[^0-9]', '', str(val_raw)))
+        return f"${clean_val:,}"
+    except:
+        return f"${val_raw}"
 
 def translate_trade(text):
     if "forfeit" in text.lower(): return text
@@ -148,41 +146,46 @@ async def main():
     extracted_signings = []
     trades = []
 
-    # --- ИМИТАЦИЯ БРАУЗЕРА ХРОМ ЧЕРЕЗ API ПОДПИСАНИЙ ---
-    try:
-        signings_api_url = "https://puckpedia.com/api/api_signings?sort=date&direction=desc"
-        res = requests.get(signings_api_url, headers=HEADERS, impersonate="chrome", timeout=15)
-        if res.status_code == 200:
-            data = res.json()
-            if isinstance(data, dict) and "data" in data and "p" in data["data"]:
-                extracted_signings = data["data"]["p"]
-        else:
-            print(f"АПИ подписаний вернул статус: {res.status_code}")
-    except Exception as e:
-        print(f"Ошибка запроса АПИ подписаний: {e}")
+    # Твои точные JSON параметры запросов (закодированные в URL)
+    signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
+    trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
 
-    # --- ИМИТАЦИЯ БРАУЗЕРА ХРОМ ЧЕРЕЗ API ТРЕЙДОВ ---
+    # --- 1. ЗАПРОС СВЕЖИХ ПОДПИСАНИЙ ЧЕРЕЗ КОРРЕКТНЫЙ API ---
     try:
-        trades_api_url = "https://puckpedia.com/api/api_trades?sort=date&direction=desc"
-        res = requests.get(trades_api_url, headers=HEADERS, impersonate="chrome", timeout=15)
+        url = f"https://puckpedia.com/data/api_signings?q={signings_q}"
+        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=15)
         if res.status_code == 200:
-            data = res.json()
-            if isinstance(data, dict) and "rows" in data:
-                for row in data["rows"]:
+            res_json = res.json()
+            if isinstance(res_json, dict) and "rows" in res_json:
+                extracted_signings = res_json["rows"]
+        else:
+            print(f"Ошибка АПИ подписаний. Статус: {res.status_code}")
+    except Exception as e:
+        print(f"Исключение при запросе подписаний: {e}")
+
+    # --- 2. ЗАПРОС СВЕЖИХ ТРЕЙДОВ ЧЕРЕЗ КОРРЕКТНЫЙ API ---
+    try:
+        url = f"https://puckpedia.com/data/api_trades?q={trades_q}"
+        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=15)
+        if res.status_code == 200:
+            res_json = res.json()
+            if isinstance(res_json, dict) and "rows" in res_json:
+                for row in res_json["rows"]:
                     html_text = row.get("details_nolinks", "")
+                    # Очищаем строку от ссылок и HTML-тегов
                     clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
                     if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
                         trades.append(translate_trade(clean_text))
         else:
-            print(f"АПИ трейдов вернул статус: {res.status_code}")
+            print(f"Ошибка АПИ трейдов. Статус: {res.status_code}")
     except Exception as e:
-        print(f"Ошибка запроса АПИ трейдов: {e}")
+        print(f"Исключение при запросе трейдов: {e}")
 
     if not extracted_signings and not trades:
-        print("Внимание: Данные через имитатор curl_cffi вообще не собрались. Отмена операции.")
+        print("Внимание: Данные по точным API ссылкам не собрались. Отмена.")
         return
 
-    # --- ФОРМИРОВАНИЕ ---
+    # --- ФОРМИРОВАНИЕ ТЕКСТА ---
     s_list = []
     current_signature_elements = []
 
@@ -193,9 +196,17 @@ async def main():
         current_signature_elements.append(name)
         
         lvl = str(item.get("lvl", "")).upper()
-        total_val = float(item.get('cval', 0) or 0)
+        
+        # Очищаем значение cval от лишних символов
+        raw_cval = str(item.get('cval', 0) or 0)
+        try:
+            total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
+        except:
+            total_val = 0
+            
         years = int(item.get('len') or 1)
         cap_val = total_val / years if "ELC" in lvl else total_val
+        
         ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
@@ -204,7 +215,6 @@ async def main():
     for t in t_list:
         current_signature_elements.append(t[:50])
 
-    # Сравнение отпечатка с кэшем
     current_signature = "|".join(current_signature_elements)
     last_cached_signature = get_last_cached_signature()
 
@@ -212,7 +222,6 @@ async def main():
         print("Новых подписаний и трейдов нет. Отмена отправки.")
         return
     
-    # Сборка финального сообщения
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     
     send_to_telegram(message)
