@@ -48,11 +48,12 @@ RUS_TEAM_MAPPING = {
     'Seattle Kraken': {'main': 'Сиэттл обменял', 'from': 'из Сиэттла'},
     'Utah Mammoth': {'main': 'Юта обменяла', 'from': 'из Юты'},
     'Vancouver Canucks': {'main': 'Ванкувер обменял', 'from': 'из Ванкувера'},
-    'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из [Виннипега]'}
+    'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
 }
 
 CACHE_FILE = "last_data_cache.txt"
 
+# Имитируем чистый AJAX/Fetch запрос от браузера
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
@@ -80,7 +81,7 @@ def save_to_cache_and_commit(new_signature):
             if status.stdout.strip():
                 subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
-                print("Кэш успешно сохранен в репозиторий.")
+                print("Кэш успешно сохранен в репозиторий GitHub.")
         except Exception as e:
             print(f"Не удалось сохранить кэш в Git: {e}")
 
@@ -104,18 +105,21 @@ def send_to_telegram(text):
         try:
             tg_req.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
         except Exception as e:
-            print(f"Ошибка отправки: {e}")
+            print(f"Ошибка отправки сообщения: {e}")
 
 def get_team_abbr(team_name_raw):
     if not team_name_raw: return ""
-    name = str(team_name_raw).lower().strip()
+    # Если внутри названия команды зашит HTML (например, логотип/картинка), очищаем его
+    clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
     for team_key, abbr in TEAM_MAPPING.items():
-        if team_key in name: return f"({abbr})"
-    return f"({name[:3].upper()})"
+        if team_key in clean_name: return f"({abbr})"
+    return f"({clean_name[:3].upper()})"
 
 def format_years(years_raw):
-    try: years = int(years_raw)
-    except: return "на срок"
+    try:
+        years = int(re.sub(r'[^0-9]', '', str(years_raw)))
+    except:
+        return "на срок"
     if years == 1: return "на 1 год"
     elif 2 <= years <= 4: return f"на {years} года"
     else: return f"на {years} лет"
@@ -146,58 +150,63 @@ async def main():
     extracted_signings = []
     trades = []
 
-    # Твои точные JSON параметры запросов (закодированные в URL)
+    # Строки параметров запросов, которые ты вытащил из вкладки Network
     signings_q = '{"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
     trades_q = '{"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
 
-    # --- 1. ЗАПРОС СВЕЖИХ ПОДПИСАНИЙ ЧЕРЕЗ КОРРЕКТНЫЙ API ---
+    # --- 1. СБОР ПОДПИСАНИЙ ИЗ ОФИЦИАЛЬНОГО JSON API ---
     try:
         url = f"https://puckpedia.com/data/api_signings?q={signings_q}"
-        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=15)
+        # curl_cffi идеально имитирует TLS-отпечаток Хрома, обходя Cloudflare на GitHub Actions
+        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=20)
         if res.status_code == 200:
             res_json = res.json()
             if isinstance(res_json, dict) and "rows" in res_json:
                 extracted_signings = res_json["rows"]
         else:
-            print(f"Ошибка АПИ подписаний. Статус: {res.status_code}")
+            print(f"Ошибка API подписаний. Статус-код: {res.status_code}")
     except Exception as e:
-        print(f"Исключение при запросе подписаний: {e}")
+        print(f"Исключение при выполнении запроса подписаний: {e}")
 
-    # --- 2. ЗАПРОС СВЕЖИХ ТРЕЙДОВ ЧЕРЕЗ КОРРЕКТНЫЙ API ---
+    # --- 2. СБОР ТРЕЙДОВ ИЗ ОФИЦИАЛЬНОГО JSON API ---
     try:
         url = f"https://puckpedia.com/data/api_trades?q={trades_q}"
-        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=15)
+        res = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=20)
         if res.status_code == 200:
             res_json = res.json()
             if isinstance(res_json, dict) and "rows" in res_json:
                 for row in res_json["rows"]:
                     html_text = row.get("details_nolinks", "")
-                    # Очищаем строку от ссылок и HTML-тегов
+                    # Избавляемся от HTML-ссылок в тексте трейда
                     clean_text = re.sub(r'<[^>]+>', '', html_text).strip()
                     if clean_text and "The ID of this channel" not in clean_text and len(clean_text) > 20:
                         trades.append(translate_trade(clean_text))
         else:
-            print(f"Ошибка АПИ трейдов. Статус: {res.status_code}")
+            print(f"Ошибка API трейдов. Статус-код: {res.status_code}")
     except Exception as e:
-        print(f"Исключение при запросе трейдов: {e}")
+        print(f"Исключение при выполнении запроса трейдов: {e}")
 
     if not extracted_signings and not trades:
-        print("Внимание: Данные по точным API ссылкам не собрались. Отмена.")
+        print("Внимание: Никакие данные не собрались. Операция прервана.")
         return
 
-    # --- ФОРМИРОВАНИЕ ТЕКСТА ---
+    # --- СБОРКА И ПРОВЕРКА КЭША ---
     s_list = []
     current_signature_elements = []
 
+    # Обрабатываем 3 последних подписания
     for item in extracted_signings[:3]:
-        name = f"{item.get('p_fn', '')} {item.get('p_ln', '')}".strip()
+        # Получаем чистые имя и фамилию
+        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
+        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
+        name = f"{first_name} {last_name}".strip()
         if not name: continue
         
         current_signature_elements.append(name)
         
         lvl = str(item.get("lvl", "")).upper()
         
-        # Очищаем значение cval от лишних символов
+        # Получаем чистое числовое значение контракта
         raw_cval = str(item.get('cval', 0) or 0)
         try:
             total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
@@ -211,17 +220,20 @@ async def main():
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
+    # Обрабатываем 3 последних трейда
     t_list = trades[:3]
     for t in t_list:
         current_signature_elements.append(t[:50])
 
+    # Проверяем изменения по уникальному отпечатку (сигнатуре)
     current_signature = "|".join(current_signature_elements)
     last_cached_signature = get_last_cached_signature()
 
     if current_signature == last_cached_signature:
-        print("Новых подписаний и трейдов нет. Отмена отправки.")
+        print("Новых событий на сайте нет. Отмена отправки.")
         return
     
+    # Формируем и отправляем итоговое сообщение
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     
     send_to_telegram(message)
