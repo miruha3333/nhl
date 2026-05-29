@@ -113,24 +113,20 @@ async def main():
 
         print("Загрузка сайта...")
         
-        # Сбор подписаний
+        # Сбор подписаний из вашего конкретного блока
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(5) 
+        await asyncio.sleep(8) 
         
         extracted_signings = await page.evaluate('''() => {
-            const rows = [...document.querySelectorAll('tr[\\\\:key="x.cid"]'), ...document.querySelectorAll('div.flex-1.mt-3.lg\\\\:mt-0 tr')];
-            return rows.slice(0, 5).map(tr => {
-                const nameText = tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || '';
-                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
-                return {
-                    name: nameText.trim(),
-                    team: cells[1] || '',
-                    cval: cells[2] || '0',
-                    len: cells[3] || '1',
-                    lvl: cells[4] || '',
-                    type: cells.join(' ').toLowerCase()
-                };
-            });
+            // Ищем ваш целевой блок и берем его дочерние элементы
+            const container = document.querySelector('div.flex-1.mt-3.lg\\\\:mt-0');
+            if (!container) return [];
+            
+            // Если там элементы списка или карточки, собираем текст
+            const items = Array.from(container.querySelectorAll('tr, div.grid-cols-3 > div, div.flex'));
+            return items.map(el => ({
+                text: el.innerText.trim()
+            })).filter(item => item.text.includes('$') || item.text.length > 10).slice(0, 5);
         }''')
 
         # Сбор трейдов
@@ -145,7 +141,8 @@ async def main():
         print("Данные не собрались.")
         return
 
-    s_list = [f"{s['name']} {'продлил' if 'ext' in s['type'] else 'подписал'} {format_years(s['len'])} с кэпхитом ${s['cval']} {get_team_abbr(s['team'])}" for s in extracted_signings[:3]]
+    # Формирование сообщения (упрощено под структуру текста)
+    s_list = [s['text'] for s in extracted_signings[:3]]
     t_list = trades[:3]
     
     msg = f"🔥 ПОДПИСАНИЯ:\n{chr(10).join(s_list)}\n\n🤝 ТРЕЙДЫ:\n{chr(10).join(t_list)}"
