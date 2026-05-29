@@ -148,38 +148,32 @@ async def main():
         # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=45000)
-            # Ожидаем появления контейнера с данными
-            await page.wait_for_selector('div.grid-cols-3', timeout=20000)
+            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=60000)
+            # Ждем появления контейнера, который содержит данные подписаний
+            await page.wait_for_selector('div.grid.grid-cols-1', timeout=20000)
         except Exception as e:
             print(f"Предупреждение по подписаниям: {e}")
 
+        # Используем JS для поиска блоков по структуре, которую вы указали
         extracted_signings = await page.evaluate('''() => {
-            // Ищем строки, которые содержат информацию об игроке
-            const rows = Array.from(document.querySelectorAll('div.border-b.border-gray-200'));
-            return rows.slice(0, 5).map(row => {
-                // Извлекаем имя из заголовка или ссылки
-                const nameText = row.querySelector('a')?.innerText || '';
-                const parts = nameText.trim().split(' ');
+            // Ищем все блоки, которые содержат grid-cols-3, так как это индикатор строки данных
+            const items = Array.from(document.querySelectorAll('div[class*="grid-cols-3"]'));
+            
+            return items.map(item => {
+                // Пытаемся найти имя игрока (обычно внутри ссылки в родительском или текущем блоке)
+                const nameLink = item.closest('div').querySelector('a');
+                const nameText = nameLink ? nameLink.innerText : 'Unknown';
                 
-                // Ищем блок с данными: ищем все элементы в grid-cols-3
-                const dataCells = Array.from(row.querySelectorAll('div.grid-cols-3 > div'));
-                // Обычно текст команды, суммы и т.д. находятся в определенных позициях
-                // На основе структуры PuckPedia:
-                const team = dataCells[0]?.innerText || '';
-                const cval = dataCells[1]?.innerText || '0';
-                const len = dataCells[2]?.innerText || '1';
+                // Получаем все ячейки (div) внутри этого grid-блока
+                const cells = Array.from(item.querySelectorAll('div'));
                 
                 return {
-                    p_fn: parts[0] || '',
-                    p_ln: parts.slice(1).join(' ') || '',
-                    team_name: team,
-                    cval: cval,
-                    len: len,
-                    lvl: '',
-                    type_name: ''
+                    name: nameText,
+                    team_name: cells[0]?.innerText || '',
+                    cval: cells[1]?.innerText || '0',
+                    len: cells[2]?.innerText || '1'
                 };
-            });
+            }).filter(i => i.name !== 'Unknown').slice(0, 5);
         }''')
 
         # --- СБОР ТРЕЙДОВ ---
@@ -200,7 +194,7 @@ async def main():
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались из HTML структуры. Операция прервана.")
+        print("Внимание: Никакие данные не собрались. Операция прервана.")
         return
 
     print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
@@ -209,27 +203,21 @@ async def main():
     s_list = []
     current_signature_elements = []
 
-    for item in extracted_signings[:3]:
-        first_name = re.sub(r'<[^>]+>', '', str(item.get('p_fn', ''))).strip()
-        last_name = re.sub(r'<[^>]+>', '', str(item.get('p_ln', ''))).strip()
-        name = f"{first_name} {last_name}".strip()
+    for item in extracted_signings:
+        name = item.get('name', '').strip()
         if not name: continue
-        
         current_signature_elements.append(name)
         
-        lvl = str(item.get("lvl", "")).upper()
         raw_cval = str(item.get('cval', 0) or 0)
         try:
             total_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
         except:
             total_val = 0
             
-        years = int(str(item.get('len') or 1).replace('на', '').strip() or 1)
-        cap_val = total_val / years if "ELC" in lvl else total_val
+        years = int(re.sub(r'[^0-9]', '', str(item.get('len', '1'))) or 1)
+        cap_val = total_val / years if years > 0 else total_val
         
-        ctype = "подписал контракт"
-            
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
+        line = f"{name} подписал контракт {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(item.get('team_name'))}"
         s_list.append(line)
         
     seen = set()
@@ -247,7 +235,7 @@ async def main():
     last_cached_signature = get_last_cached_signature()
 
     if current_signature == last_cached_signature:
-        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки дубликатов.")
+        print("Новых событий на PuckPedia нет.")
         return
     
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
