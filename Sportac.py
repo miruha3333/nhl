@@ -63,23 +63,12 @@ def save_to_cache_and_commit(new_signature):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         f.write(new_signature)
     if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", CACHE_FILE], check=True)
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша событий [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-        except Exception as e:
-            print(f"Git error: {e}")
-
-def get_rus_team_data(eng_name):
-    clean_name = eng_name.strip()
-    for key, value in RUS_TEAM_MAPPING.items():
-        if clean_name.lower() in key.lower():
-            return value
-    return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
+        subprocess.run(["git", "config", "--global", "user.name", "bot"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "bot@bot.com"], check=True)
+        subprocess.run(["git", "add", CACHE_FILE], check=True)
+        if subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip():
+            subprocess.run(["git", "commit", "-m", "update cache [skip ci]"], check=True)
+            subprocess.run(["git", "push"], check=True)
 
 def get_team_abbr(team_name_raw):
     clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
@@ -87,66 +76,56 @@ def get_team_abbr(team_name_raw):
         if team_key in clean_name: return f"({abbr})"
     return f"({clean_name[:3].upper()})"
 
-def translate_trade(text):
-    if "forfeit" in text.lower(): return text
-    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
-    match = re.search(pattern, text)
-    if match:
-        team1, p1, team2, p2 = match.groups()
-        rus_team1_data = get_rus_team_data(team1)
-        rus_team2_data = get_rus_team_data(team2)
-        p1 = p1.replace(".", "").replace(" and ", " и ")
-        p2 = p2.replace(".", "").replace(" and ", " и ")
-        return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
-    return text
-
 async def main():
-    extracted_signings = []
-    trades = []
-    
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        # Эмуляция обычного браузера
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
+        )
+        page = await context.new_page()
         
-        # Сбор подписаний
+        # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка подписаний...")
-        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=60000)
         await asyncio.sleep(10)
+        
         extracted_signings = await page.evaluate('''() => {
-            const container = Array.from(document.querySelectorAll('div')).find(div => 
-                div.className.includes('flex-1') && div.className.includes('mt-3') && div.className.includes('grid-cols-3')
-            );
-            const rows = container ? Array.from(container.querySelectorAll('tr')) : Array.from(document.querySelectorAll('tr'));
+            // Ищем все строки таблицы, в которых есть знак доллара (признак контракта)
+            const rows = Array.from(document.querySelectorAll('tr'));
             return rows.filter(tr => tr.innerText.includes('$')).slice(0, 5).map(tr => {
-                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
+                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
                 return {
-                    name: tr.querySelector('.pp_link span')?.innerText || tr.querySelector('td a')?.innerText || 'Unknown',
-                    team: cells[1] || '',
+                    name: tr.innerText.split('\n')[0].trim(),
+                    team: cells[1] || 'N/A',
                     cval: cells[2] || '0',
                     len: cells[3] || '1'
                 };
             });
         }''')
 
-        # Сбор трейдов
+        # --- СБОР ТРЕЙДОВ ---
         print("Загрузка трейдов...")
-        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=60000)
         await asyncio.sleep(10)
+        
         trades = await page.evaluate('''() => {
-            return Array.from(document.querySelectorAll('*'))
-                .filter(el => el.getAttribute('x-html') === 'row.details_nolinks')
-                .map(el => el.innerText.trim());
+            // Ищем блоки с текстом трейдов
+            const elements = Array.from(document.querySelectorAll('div'));
+            return elements.filter(el => el.getAttribute('x-html') === 'row.details_nolinks')
+                           .map(el => el.innerText.trim());
         }''')
         
         await browser.close()
 
     if not extracted_signings and not trades:
-        print("Данные не найдены.")
+        print("Данные не найдены. Скрипт завершен.")
         return
 
-    lines = [f"{s['name']} - {s['cval']} на {s['len']} года {get_team_abbr(s['team'])}" for s in extracted_signings]
-    trade_lines = [translate_trade(t) for t in trades if len(t) > 20][:3]
-    
+    # Формирование и отправка
+    lines = [f"{s['name']} — {s['cval']} на {s['len']} года {get_team_abbr(s['team'])}" for s in extracted_signings]
+    trade_lines = [t for t in trades if len(t) > 15][:3]
     msg = "🔥 ПОДПИСАНИЯ:\n" + "\n".join(lines) + "\n\n🤝 ТРЕЙДЫ:\n" + "\n".join(trade_lines)
     
     current_sig = "|".join([s['name'] for s in extracted_signings] + trade_lines)
