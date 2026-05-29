@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
+          # ИСПРАВЛЕНО: Убрали строчку cache: 'pip', которая вызывала ошибку
 
       - name: Install Python dependencies
         run: |
