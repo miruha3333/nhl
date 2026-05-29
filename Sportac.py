@@ -148,58 +148,48 @@ async def main():
         )
         page = await context.new_page()
         
-        # --- СБОР ПОДПИСАНИЙ ---
         print("Загрузка страницы подписаний...")
         try:
-            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=45000)
+            await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=60000)
             await asyncio.sleep(5)
             
-            # Новый, надежный метод сбора данных внутри блоков
+            # Экранируем двоеточие в селекторе: lg\:flex-row
             extracted_signings = await page.evaluate('''() => {
-                const blocks = Array.from(document.querySelectorAll('div.flex.items-start.flex-col.lg\\:flex-row'));
+                const blocks = Array.from(document.querySelectorAll('div.flex.items-start.flex-col.lg\\\\:flex-row'));
                 return blocks.slice(0, 5).map(container => {
-                    // Имя: обычно внутри ссылок или в заголовках
                     const nameEl = container.querySelector('a[href*="/player/"]') || container.querySelector('div.font-bold');
                     const name = nameEl ? nameEl.innerText.trim() : "Unknown Player";
-                    
-                    // Команда: ищем по тексту внутри блоков или атрибутам
                     const teamEl = container.querySelector('a[href*="/team/"]');
                     const team = teamEl ? teamEl.innerText.trim() : "";
                     
-                    // Извлекаем цифры для Cap Hit и Term из сетки данных
                     const grid = container.querySelector('div.grid');
-                    let cval = "0";
-                    let len = "1";
+                    let cval = "0", len = "1";
                     
                     if (grid) {
                         const items = Array.from(grid.querySelectorAll('div'));
                         items.forEach((div, idx) => {
                             const txt = div.innerText.toLowerCase();
-                            if (txt.includes('cap hit') || txt.includes('aav')) {
-                                cval = items[idx + 1] ? items[idx + 1].innerText.trim() : "0";
-                            }
-                            if (txt.includes('term')) {
-                                len = items[idx + 1] ? items[idx + 1].innerText.trim() : "1";
-                            }
+                            if (txt.includes('cap hit') || txt.includes('aav')) cval = items[idx + 1] ? items[idx + 1].innerText.trim() : "0";
+                            if (txt.includes('term')) len = items[idx + 1] ? items[idx + 1].innerText.trim() : "1";
                         });
                     }
-                    
                     return { name, team, cval, len };
                 });
             }''')
         except Exception as e:
             print(f"Ошибка при сборе подписаний: {e}")
 
-        # --- СБОР ТРЕЙДОВ ---
         print("Загрузка страницы трейдов...")
         try:
-            await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_selector('div[x-html="row.details_nolinks"]', timeout=20000)
+            await page.goto("https://puckpedia.com/trades", wait_until="networkidle", timeout=60000)
+            # Убираем жесткий wait_for_selector, просто берем все div, которые могут содержать данные
+            await asyncio.sleep(5)
             all_trades = await page.evaluate('''() => {
-                const blocks = Array.from(document.querySelectorAll('div[x-html="row.details_nolinks"]'));
-                return blocks.map(el => el.innerText.trim());
+                const blocks = Array.from(document.querySelectorAll('div'));
+                return blocks.filter(b => b.innerText && b.innerText.includes('acquire') && b.innerText.length < 500)
+                             .map(el => el.innerText.trim());
             }''')
-            trades = [translate_trade(t) for t in all_trades if "The ID of this channel" not in t and len(t) > 20]
+            trades = [translate_trade(t) for t in list(set(all_trades)) if len(t) > 20]
         except Exception as e:
             print(f"Ошибка при сборе трейдов: {e}")
         
@@ -209,23 +199,16 @@ async def main():
         print("Данные не найдены.")
         return
 
-    # --- ФОРМИРОВАНИЕ ТЕКСТА ---
     s_list = []
     current_signature_elements = []
 
     for item in extracted_signings:
         name = item['name']
         current_signature_elements.append(name)
-        
-        # Обработка данных
-        cval = item['cval']
-        len_val = item['len']
-        line = f"{name} подписал контракт {len_val} на сумму {cval} {get_team_abbr(item['team'])}"
+        line = f"{name} подписал контракт {item['len']} на сумму {item['cval']} {get_team_abbr(item['team'])}"
         s_list.append(line)
         
-    seen = set()
-    unique_trades = [t for t in trades if not (t in seen or seen.add(t))]
-    t_list = unique_trades[:3]
+    t_list = trades[:3]
     for t in t_list:
         current_signature_elements.append(t[:50])
 
