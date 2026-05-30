@@ -271,7 +271,7 @@ async def main():
         lvl = str(item.get("lvl", "")).upper()
         raw_cval = str(item.get('cval', 0) or 0)
         try:
-            cap_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0)
+            cap_val = float(re.sub(r'[^0-9.]', '', raw_cval) or 0) / 10
         except:
             cap_val = 0
 
