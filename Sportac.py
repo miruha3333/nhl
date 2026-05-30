@@ -1,8 +1,10 @@
+import asyncio
 import os
 import re
 import subprocess
 import requests
 import json
+from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
 
@@ -53,17 +55,8 @@ RUS_TEAM_MAPPING = {
 
 CACHE_FILE = "last_data_cache.txt"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://puckpedia.com/signings",
-}
-
-SIGNINGS_URL = 'https://puckpedia.com/data/api_signings?q={"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-
-TRADES_URL = 'https://puckpedia.com/data/api_trades?q={"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+SIGNINGS_API = 'https://puckpedia.com/data/api_signings?q={"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
+TRADES_API = 'https://puckpedia.com/data/api_trades?q={"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
 
 def get_last_cached_signature():
     if os.path.exists(CACHE_FILE):
@@ -151,49 +144,99 @@ def translate_trade(text):
         return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
     return text
 
-def fetch_with_retry(url, retries=5, delay=10):
-    for attempt in range(retries):
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=30)
-            if resp.status_code == 200:
-                data = resp.json()
-                # API возвращает либо список либо dict с ключом data/rows/results
-                if isinstance(data, list):
-                    return data
-                for key in ('data', 'rows', 'results', 'items'):
-                    if key in data and isinstance(data[key], list):
-                        return data[key]
-                # Если структура неизвестна — вернём как есть для отладки
-                print(f"Неизвестная структура ответа: {str(data)[:300]}")
-                return []
-            else:
-                print(f"Попытка {attempt+1}: статус {resp.status_code}, повтор через {delay}с...")
-        except Exception as e:
-            print(f"Попытка {attempt+1}: ошибка {e}, повтор через {delay}с...")
-        import time
-        time.sleep(delay)
+def parse_api_response(data):
+    if isinstance(data, list):
+        return data
+    for key in ('data', 'rows', 'results', 'items'):
+        if key in data and isinstance(data[key], list):
+            return data[key]
     return []
 
-# --- ОСНОВНАЯ ЛОГИКА ---
+async def main():
+    raw_signings = []
+    raw_trades = []
 
-def main():
-    # --- ПОДПИСАНИЯ ---
-    print("Запрос данных подписаний...")
-    raw_signings = fetch_with_retry(SIGNINGS_URL)
-    print(f"Получено подписаний: {len(raw_signings)}")
-    if raw_signings:
-        print(f"Пример записи: {json.dumps(raw_signings[0], ensure_ascii=False)[:300]}")
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
 
-    # --- ТРЕЙДЫ ---
-    print("Запрос данных трейдов...")
-    raw_trades = fetch_with_retry(TRADES_URL)
-    print(f"Получено трейдов: {len(raw_trades)}")
-    if raw_trades:
-        print(f"Пример записи: {json.dumps(raw_trades[0], ensure_ascii=False)[:300]}")
+        # --- ШАГ 1: открываем страницу подписаний чтобы получить куки и сессию ---
+        print("Открываем страницу подписаний для получения сессии...")
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(5)
 
-    if not raw_signings and not raw_trades:
-        print("Данные не получены после всех попыток. Операция прервана.")
-        return
+        # Получаем куки из браузера
+        cookies = await context.cookies()
+        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+
+        # Получаем заголовки реального браузера со страницы
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://puckpedia.com/signings",
+            "Cookie": cookie_str,
+            "X-Requested-With": "XMLHttpRequest",
+        }
+
+        # --- ШАГ 2: делаем API запросы напрямую через Playwright (обходим 403) ---
+        print("Запрос API подписаний...")
+        try:
+            api_response = await page.evaluate(f'''async () => {{
+                const resp = await fetch("{SIGNINGS_API}", {{
+                    headers: {{
+                        "Accept": "application/json",
+                        "X-Requested-With": "XMLHttpRequest"
+                    }}
+                }});
+                const text = await resp.text();
+                return {{status: resp.status, body: text}};
+            }}''')
+            print(f"  Статус: {api_response['status']}")
+            if api_response['status'] == 200:
+                data = json.loads(api_response['body'])
+                raw_signings = parse_api_response(data)
+                print(f"  Получено подписаний: {len(raw_signings)}")
+                if raw_signings:
+                    print(f"  Пример: {json.dumps(raw_signings[0], ensure_ascii=False)[:300]}")
+            else:
+                print(f"  Ошибка: {api_response['body'][:200]}")
+        except Exception as e:
+            print(f"Ошибка запроса подписаний: {e}")
+
+        # --- ШАГ 3: открываем страницу трейдов и запрашиваем их API ---
+        print("Открываем страницу трейдов для получения сессии...")
+        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(5)
+
+        print("Запрос API трейдов...")
+        try:
+            api_response = await page.evaluate(f'''async () => {{
+                const resp = await fetch("{TRADES_API}", {{
+                    headers: {{
+                        "Accept": "application/json",
+                        "X-Requested-With": "XMLHttpRequest"
+                    }}
+                }});
+                const text = await resp.text();
+                return {{status: resp.status, body: text}};
+            }}''')
+            print(f"  Статус: {api_response['status']}")
+            if api_response['status'] == 200:
+                data = json.loads(api_response['body'])
+                raw_trades = parse_api_response(data)
+                print(f"  Получено трейдов: {len(raw_trades)}")
+                if raw_trades:
+                    print(f"  Пример: {json.dumps(raw_trades[0], ensure_ascii=False)[:300]}")
+            else:
+                print(f"  Ошибка: {api_response['body'][:200]}")
+        except Exception as e:
+            print(f"Ошибка запроса трейдов: {e}")
+
+        await browser.close()
 
     if not raw_signings:
         print("Подписания не загрузились. Операция прервана.")
@@ -202,6 +245,8 @@ def main():
     if not raw_trades:
         print("Трейды не загрузились. Операция прервана.")
         return
+
+    print(f"Успешно получено. Подписаний: {len(raw_signings)}, Трейдов: {len(raw_trades)}")
 
     # --- ФОРМИРОВАНИЕ ПОДПИСАНИЙ ---
     s_list = []
@@ -246,7 +291,6 @@ def main():
     seen = set()
     unique_trades = []
     for item in raw_trades:
-        # Текст трейда может быть в разных полях
         text = str(item.get('details_nolinks', '') or item.get('details', '') or item.get('text', '') or '').strip()
         if not text:
             continue
@@ -264,7 +308,7 @@ def main():
     last_cached_signature = get_last_cached_signature()
 
     if current_signature == last_cached_signature:
-        print("Новых событий на PuckPedia нет. Скрипт завершен без отправки.")
+        print("Новых событий нет. Скрипт завершен без отправки.")
         return
 
     # --- ОТПРАВКА ---
@@ -273,4 +317,4 @@ def main():
     save_to_cache_and_commit(current_signature)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
