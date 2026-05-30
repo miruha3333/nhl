@@ -9,43 +9,39 @@ async def main():
         )
         page = await context.new_page()
 
-        # Перехватываем ВСЕ запросы без фильтра
         all_responses = []
 
         async def handle_response(response):
             url = response.url
-            status = response.status
             ct = response.headers.get('content-type', '')
-            # Берём только JSON-ответы и нешаблонные JS
             if 'json' in ct:
                 try:
                     body = await response.text()
                     all_responses.append({
                         'url': url,
-                        'status': status,
-                        'ct': ct,
-                        'body_preview': body[:800]
+                        'status': response.status,
+                        'body_preview': body[:1000]
                     })
                 except:
                     pass
 
         page.on("response", handle_response)
 
-        print("=== ПЕРЕХВАТ JSON-ЗАПРОСОВ: ПОДПИСАНИЯ ===")
-        await page.goto("https://puckpedia.com/signings", wait_until="networkidle", timeout=60000)
-        await asyncio.sleep(5)
+        print("=== ПЕРЕХВАТ JSON: ПОДПИСАНИЯ ===")
+        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
+        # Ждём 15 секунд — даём Alpine время сделать свои запросы
+        await asyncio.sleep(15)
 
         print(f"Найдено JSON-ответов: {len(all_responses)}")
         for r in all_responses:
             print(f"\nURL: {r['url']}")
             print(f"Body: {r['body_preview']}")
 
-        # Дополнительно — смотрим что лежит в Alpine store
+        # Смотрим Alpine store
         print("\n=== ALPINE STORE ===")
         store_data = await page.evaluate('''() => {
             try {
-                // Alpine v3
-                const store = Alpine.store('puck_filters');
+                const store = Alpine.store("puck_filters");
                 return JSON.stringify(store, null, 2).slice(0, 3000);
             } catch(e) {
                 return "Alpine.store недоступен: " + e.message;
@@ -53,28 +49,51 @@ async def main():
         }''')
         print(store_data)
 
-        # Смотрим все x-data компоненты и что в них хранится
-        print("\n=== X-DATA КОМПОНЕНТЫ ===")
-        xdata_info = await page.evaluate('''() => {
+        # Смотрим window объекты с данными
+        print("\n=== WINDOW ПЕРЕМЕННЫЕ С ДАННЫМИ ===")
+        win_data = await page.evaluate('''() => {
             const results = [];
-            const els = document.querySelectorAll('[x-data]');
-            for (const el of els) {
+            const keys = Object.keys(window);
+            for (const k of keys) {
                 try {
-                    const attr = el.getAttribute('x-data');
-                    const stack = el._x_dataStack;
-                    let dataStr = '';
-                    if (stack && stack[0]) {
-                        dataStr = JSON.stringify(stack[0], null, 2).slice(0, 500);
+                    const val = window[k];
+                    if (val && typeof val === "object" && !Array.isArray(val)) {
+                        const str = JSON.stringify(val).slice(0, 200);
+                        if (str.includes("signing") || str.includes("player") || str.includes("cap") || str.includes("contract")) {
+                            results.push(k + ": " + str);
+                        }
                     }
-                    results.push('x-data="' + attr.slice(0, 80) + '"');
-                    if (dataStr) results.push('  данные: ' + dataStr);
-                } catch(e) {
-                    results.push('  ошибка: ' + e.message);
+                    if (Array.isArray(val) && val.length > 0) {
+                        const str = JSON.stringify(val[0]).slice(0, 200);
+                        if (str.includes("signing") || str.includes("player") || str.includes("cap") || str.includes("contract")) {
+                            results.push(k + " (array): " + str);
+                        }
+                    }
+                } catch(e) {}
+            }
+            return results.slice(0, 20);
+        }''')
+        print("\n".join(win_data) if win_data else "Ничего не найдено")
+
+        # Ищем в HTML скрытые данные (inline JSON в script тегах)
+        print("\n=== SCRIPT ТЕГИ С ДАННЫМИ ===")
+        script_data = await page.evaluate('''() => {
+            const results = [];
+            const scripts = document.querySelectorAll("script:not([src])");
+            for (const s of scripts) {
+                const t = s.textContent || "";
+                if (t.includes("signing") || t.includes("p_fn") || t.includes("cap_hit") || t.includes("cval")) {
+                    results.push(t.slice(0, 800));
                 }
             }
             return results;
         }''')
-        print("\n".join(xdata_info))
+        if script_data:
+            for s in script_data:
+                print(s)
+                print("---")
+        else:
+            print("Ничего не найдено")
 
         await browser.close()
 
