@@ -244,8 +244,12 @@ async def main():
 
         await browser.close()
 
-    if not extracted_signings and not trades:
-        print("Внимание: Никакие данные не собрались. Операция прервана.")
+    if not extracted_signings:
+        print("Подписания не загрузились (Alpine store пустой). Операция прервана без отправки.")
+        return
+
+    if not trades:
+        print("Трейды не загрузились. Операция прервана без отправки.")
         return
 
     print(f"Успешно собрано. Подписаний: {len(extracted_signings)}, Трейдов: {len(trades)}")
