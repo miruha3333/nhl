@@ -146,12 +146,56 @@ def translate_trade(text):
         return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
     return text
 
-def parse_api_response(data):
-    if isinstance(data, list):
-        return data
-    for key in ('data', 'rows', 'results', 'items'):
-        if key in data and isinstance(data[key], list):
-            return data[key]
+def extract_list(data):
+    # Трейды: {"data": {"p": [...]}}
+    # Подписания: предположительно та же структура {"data": {"p": [...]}}
+    try:
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            inner = data.get('data', data)
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict):
+                # Ищем первый ключ со списком
+                for key in ('p', 'rows', 'results', 'items', 'data'):
+                    if key in inner and isinstance(inner[key], list):
+                        return inner[key]
+    except Exception as e:
+        print(f"Ошибка извлечения списка: {e}")
+    return []
+
+async def fetch_api(page, url, label):
+    for attempt in range(5):
+        try:
+            api_response = await page.evaluate('''async (fetchUrl) => {
+                const resp = await fetch(fetchUrl, {
+                    headers: {
+                        "Accept": "application/json",
+                        "X-Requested-With": "XMLHttpRequest"
+                    }
+                });
+                const text = await resp.text();
+                return {status: resp.status, body: text};
+            }''', url)
+
+            status = api_response['status']
+            print(f"  {label} попытка {attempt + 1}: статус {status}")
+
+            if status == 200:
+                data = json.loads(api_response['body'])
+                result = extract_list(data)
+                print(f"  Получено записей: {len(result)}")
+                return result
+            elif status == 403:
+                print(f"  403 Cloudflare — ждём 10 сек и повторяем...")
+                await asyncio.sleep(10)
+            else:
+                print(f"  Неожиданный статус, ждём 5 сек...")
+                await asyncio.sleep(5)
+        except Exception as e:
+            print(f"  Ошибка: {e}, ждём 5 сек...")
+            await asyncio.sleep(5)
     return []
 
 async def main():
@@ -165,71 +209,18 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- ШАГ 1: открываем страницу подписаний для получения сессии ---
-        print("Открываем страницу подписаний для получения сессии...")
+        # --- ПОДПИСАНИЯ ---
+        print("Открываем страницу подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(5)
+        # Ждём дольше чтобы Cloudflare выдал куки сессии
+        await asyncio.sleep(10)
+        raw_signings = await fetch_api(page, SIGNINGS_API, "Подписания")
 
-        # --- ШАГ 2: запрос API подписаний с диагностикой ---
-        print("Запрос API подписаний...")
-        try:
-            api_response = await page.evaluate('''async () => {
-                const resp = await fetch("https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D", {
-                    headers: {
-                        "Accept": "application/json",
-                        "X-Requested-With": "XMLHttpRequest"
-                    }
-                });
-                const text = await resp.text();
-                return {status: resp.status, body: text};
-            }''')
-            print(f"  Статус: {api_response['status']}")
-            if api_response['status'] == 200:
-                print(f"  Сырой ответ (первые 1000 символов): {api_response['body'][:1000]}")
-                data = json.loads(api_response['body'])
-                if isinstance(data, dict):
-                    print(f"  Тип: dict, ключи: {list(data.keys())}")
-                else:
-                    print(f"  Тип: list, длина: {len(data)}")
-                raw_signings = parse_api_response(data)
-                print(f"  Получено подписаний: {len(raw_signings)}")
-            else:
-                print(f"  Ошибка: {api_response['body'][:200]}")
-        except Exception as e:
-            print(f"Ошибка запроса подписаний: {e}")
-
-        # --- ШАГ 3: открываем страницу трейдов для получения сессии ---
-        print("Открываем страницу трейдов для получения сессии...")
+        # --- ТРЕЙДЫ ---
+        print("Открываем страницу трейдов...")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(5)
-
-        # --- ШАГ 4: запрос API трейдов с диагностикой ---
-        print("Запрос API трейдов...")
-        try:
-            api_response = await page.evaluate('''async () => {
-                const resp = await fetch("https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D", {
-                    headers: {
-                        "Accept": "application/json",
-                        "X-Requested-With": "XMLHttpRequest"
-                    }
-                });
-                const text = await resp.text();
-                return {status: resp.status, body: text};
-            }''')
-            print(f"  Статус: {api_response['status']}")
-            if api_response['status'] == 200:
-                print(f"  Сырой ответ (первые 1000 символов): {api_response['body'][:1000]}")
-                data = json.loads(api_response['body'])
-                if isinstance(data, dict):
-                    print(f"  Тип: dict, ключи: {list(data.keys())}")
-                else:
-                    print(f"  Тип: list, длина: {len(data)}")
-                raw_trades = parse_api_response(data)
-                print(f"  Получено трейдов: {len(raw_trades)}")
-            else:
-                print(f"  Ошибка: {api_response['body'][:200]}")
-        except Exception as e:
-            print(f"Ошибка запроса трейдов: {e}")
+        await asyncio.sleep(10)
+        raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
         await browser.close()
 
@@ -286,7 +277,7 @@ async def main():
     seen = set()
     unique_trades = []
     for item in raw_trades:
-        text = str(item.get('details_nolinks', '') or item.get('details', '') or item.get('text', '') or '').strip()
+        text = str(item.get('details_nolinks', '') or item.get('details', '') or '').strip()
         if not text:
             continue
         translated = translate_trade(text)
