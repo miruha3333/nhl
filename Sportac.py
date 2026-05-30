@@ -154,52 +154,53 @@ async def main():
         page = await context.new_page()
 
         # --- СБОР ПОДПИСАНИЙ через Alpine store ---
+        # --- СБОР ПОДПИСАНИЙ через Alpine store ---
         print("Загрузка страницы подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
 
-        # Ждём пока Alpine загрузит данные в store — polling каждые 2 секунды, максимум 30 сек
-        for attempt in range(15):
+        # Ждём появления Alpine и загрузки данных — polling каждые 2 секунды, максимум 60 сек
+        for attempt in range(30):
             await asyncio.sleep(2)
-            count = await page.evaluate('''() => {
+            result = await page.evaluate('''() => {
                 try {
-                    const data = Alpine.store("puck_filters").puckdata;
-                    return Array.isArray(data) ? data.length : 0;
+                    if (typeof Alpine === "undefined") return {status: "no_alpine", count: 0};
+                    const store = Alpine.store("puck_filters");
+                    if (!store) return {status: "no_store", count: 0};
+                    const data = store.puckdata;
+                    if (!Array.isArray(data)) return {status: "no_array", count: 0};
+                    return {status: "ok", count: data.length};
                 } catch(e) {
-                    return 0;
+                    return {status: "error", count: 0, msg: e.message};
                 }
             }''')
-            print(f"  Попытка {attempt + 1}: записей в store = {count}")
-            if count > 0:
+            print(f"  Попытка {attempt + 1}: статус={result['status']}, записей={result['count']}")
+            if result['status'] == 'ok' and result['count'] > 0:
                 break
 
         # Вытаскиваем данные прямо из Alpine store
         raw_signings = await page.evaluate('''() => {
             try {
                 const data = Alpine.store("puck_filters").puckdata ?? [];
-                return data.slice(0, 5).map(x => {
-                    // Выводим все ключи первого элемента для отладки
-                    return {
-                        keys: Object.keys(x),
-                        p_fn: x.p_fn ?? x.first_name ?? x.fname ?? "",
-                        p_ln: x.p_ln ?? x.last_name ?? x.lname ?? "",
-                        cap_hit: x.cap_hit ?? x.caphit ?? 0,
-                        cval: x.cval ?? 0,
-                        len: x.len ?? x.term ?? x.years ?? x.length ?? 1,
-                        lvl: x.lvl ?? x.level ?? x.contract_type ?? "",
-                        type_name: x.type_name ?? x.signing_type ?? "",
-                        sign_team: x.sign_team ?? x.team ?? x.sign_team_name ?? "",
-                        sign_city: x.sign_city ?? "",
-                        sign_team_name: x.sign_team_name ?? ""
-                    };
-                });
+                return data.slice(0, 5).map(x => ({
+                    keys: Object.keys(x),
+                    p_fn: x.p_fn ?? x.first_name ?? x.fname ?? "",
+                    p_ln: x.p_ln ?? x.last_name ?? x.lname ?? "",
+                    cap_hit: x.cap_hit ?? x.caphit ?? 0,
+                    cval: x.cval ?? 0,
+                    len: x.len ?? x.term ?? x.years ?? x.length ?? 1,
+                    lvl: x.lvl ?? x.level ?? x.contract_type ?? "",
+                    type_name: x.type_name ?? x.signing_type ?? "",
+                    sign_team: x.sign_team ?? x.team ?? x.sign_team_name ?? "",
+                    sign_city: x.sign_city ?? "",
+                    sign_team_name: x.sign_team_name ?? ""
+                }));
             } catch(e) {
                 return [{error: e.message}];
             }
         }''')
 
-        print(f"Данные из Alpine store: {json.dumps(raw_signings, ensure_ascii=False, indent=2)}")
+        print(f"Данные из Alpine store: {json.dumps(raw_signings[:2], ensure_ascii=False, indent=2)}")
 
-        # Формируем список подписаний
         for item in raw_signings:
             if 'error' in item:
                 print(f"Ошибка store: {item['error']}")
@@ -210,24 +211,18 @@ async def main():
             if not p_fn and not p_ln:
                 continue
 
-            # Название команды — city + team_name
             sign_city = str(item.get('sign_city', '')).strip()
             sign_team_name = str(item.get('sign_team_name', '')).strip()
             team_name = f"{sign_city} {sign_team_name}".strip() if sign_city or sign_team_name else str(item.get('sign_team', '')).strip()
-
-            cap_hit = item.get('cap_hit', 0)
-            term = item.get('len', 1)
-            lvl = str(item.get('lvl', '')).upper()
-            type_name = str(item.get('type_name', '')).lower()
 
             extracted_signings.append({
                 'p_fn': p_fn,
                 'p_ln': p_ln,
                 'team_name': team_name,
-                'cval': cap_hit,
-                'len': term,
-                'lvl': lvl,
-                'type_name': type_name
+                'cval': item.get('cap_hit', 0),
+                'len': item.get('len', 1),
+                'lvl': str(item.get('lvl', '')).upper(),
+                'type_name': str(item.get('type_name', '')).lower()
             })
 
         print(f"Итого подписаний: {len(extracted_signings)}")
