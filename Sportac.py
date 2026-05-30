@@ -147,8 +147,6 @@ def translate_trade(text):
     return text
 
 def extract_list(data):
-    # Трейды: {"data": {"p": [...]}}
-    # Подписания: предположительно та же структура {"data": {"p": [...]}}
     try:
         if isinstance(data, list):
             return data
@@ -157,7 +155,6 @@ def extract_list(data):
             if isinstance(inner, list):
                 return inner
             if isinstance(inner, dict):
-                # Ищем первый ключ со списком
                 for key in ('p', 'rows', 'results', 'items', 'data'):
                     if key in inner and isinstance(inner[key], list):
                         return inner[key]
@@ -212,7 +209,6 @@ async def main():
         # --- ПОДПИСАНИЯ ---
         print("Открываем страницу подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        # Ждём дольше чтобы Cloudflare выдал куки сессии
         await asyncio.sleep(10)
         raw_signings = await fetch_api(page, SIGNINGS_API, "Подписания")
 
@@ -236,7 +232,7 @@ async def main():
 
     # --- ФОРМИРОВАНИЕ ПОДПИСАНИЙ ---
     s_list = []
-    current_signature_elements = []
+    s_cache_parts = []
 
     for item in raw_signings[:3]:
         p_fn = str(item.get('p_fn', '')).strip()
@@ -245,7 +241,7 @@ async def main():
         if not name:
             continue
 
-        current_signature_elements.append(name)
+        s_cache_parts.append(name)
 
         lvl = str(item.get('lvl', '')).upper()
         cap_hit = item.get('cap_hit', 0) or 0
@@ -286,11 +282,11 @@ async def main():
             unique_trades.append(translated)
 
     t_list = unique_trades[:3]
-    for t in t_list:
-        current_signature_elements.append(t[:50])
+    t_cache_parts = [t for t in t_list]
 
     # --- ПРОВЕРКА КЭША ---
-    current_signature = "|".join(current_signature_elements)
+    # Сравниваем имена игроков и полные тексты трейдов отдельно через разделитель
+    current_signature = "|".join(s_cache_parts) + "||" + "|".join(t_cache_parts)
     last_cached_signature = get_last_cached_signature()
 
     if current_signature == last_cached_signature:
@@ -301,6 +297,7 @@ async def main():
     message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
     send_to_telegram(message)
     save_to_cache_and_commit(current_signature)
+    print("Сообщение отправлено в Telegram.")
 
 if __name__ == "__main__":
     asyncio.run(main())
