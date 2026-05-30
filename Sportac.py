@@ -55,8 +55,10 @@ RUS_TEAM_MAPPING = {
 
 CACHE_FILE = "last_data_cache.txt"
 
-SIGNINGS_API = 'https://puckpedia.com/data/api_signings?q={"curPage":1,"pageSize":100,"api_url":"/data/api_signings","url":"signings","defaultSort":"sign_date","sortBy":"sign_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
-TRADES_API = 'https://puckpedia.com/data/api_trades?q={"curPage":1,"pageSize":40,"api_url":"/data/api_trades","url":"trades","defaultSort":"trade_date","sortBy":"trade_date","sortDirection":"DESC","sortBySecondary":"","sortDirectionSecondary":""}'
+SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
+TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
+
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 def get_last_cached_signature():
     if os.path.exists(CACHE_FILE):
@@ -163,38 +165,24 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- ШАГ 1: открываем страницу подписаний чтобы получить куки и сессию ---
+        # --- ШАГ 1: открываем страницу подписаний для получения сессии и куки ---
         print("Открываем страницу подписаний для получения сессии...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(5)
 
-        # Получаем куки из браузера
-        cookies = await context.cookies()
-        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
-
-        # Получаем заголовки реального браузера со страницы
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://puckpedia.com/signings",
-            "Cookie": cookie_str,
-            "X-Requested-With": "XMLHttpRequest",
-        }
-
-        # --- ШАГ 2: делаем API запросы напрямую через Playwright (обходим 403) ---
+        # --- ШАГ 2: запрос API подписаний через браузерный fetch (обходим 403) ---
         print("Запрос API подписаний...")
         try:
-            api_response = await page.evaluate(f'''async () => {{
-                const resp = await fetch("{SIGNINGS_API}", {{
-                    headers: {{
+            api_response = await page.evaluate('''async () => {
+                const resp = await fetch("https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D", {
+                    headers: {
                         "Accept": "application/json",
                         "X-Requested-With": "XMLHttpRequest"
-                    }}
-                }});
+                    }
+                });
                 const text = await resp.text();
-                return {{status: resp.status, body: text}};
-            }}''')
+                return {status: resp.status, body: text};
+            }''')
             print(f"  Статус: {api_response['status']}")
             if api_response['status'] == 200:
                 data = json.loads(api_response['body'])
@@ -207,23 +195,24 @@ async def main():
         except Exception as e:
             print(f"Ошибка запроса подписаний: {e}")
 
-        # --- ШАГ 3: открываем страницу трейдов и запрашиваем их API ---
+        # --- ШАГ 3: открываем страницу трейдов для получения сессии ---
         print("Открываем страницу трейдов для получения сессии...")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(5)
 
+        # --- ШАГ 4: запрос API трейдов через браузерный fetch ---
         print("Запрос API трейдов...")
         try:
-            api_response = await page.evaluate(f'''async () => {{
-                const resp = await fetch("{TRADES_API}", {{
-                    headers: {{
+            api_response = await page.evaluate('''async () => {
+                const resp = await fetch("https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D", {
+                    headers: {
                         "Accept": "application/json",
                         "X-Requested-With": "XMLHttpRequest"
-                    }}
-                }});
+                    }
+                });
                 const text = await resp.text();
-                return {{status: resp.status, body: text}};
-            }}''')
+                return {status: resp.status, body: text};
+            }''')
             print(f"  Статус: {api_response['status']}")
             if api_response['status'] == 200:
                 data = json.loads(api_response['body'])
