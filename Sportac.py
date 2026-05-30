@@ -165,12 +165,12 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- ШАГ 1: открываем страницу подписаний для получения сессии и куки ---
+        # --- ШАГ 1: открываем страницу подписаний для получения сессии ---
         print("Открываем страницу подписаний для получения сессии...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(5)
 
-        # --- ШАГ 2: запрос API подписаний через браузерный fetch (обходим 403) ---
+        # --- ШАГ 2: запрос API подписаний с диагностикой ---
         print("Запрос API подписаний...")
         try:
             api_response = await page.evaluate('''async () => {
@@ -185,11 +185,14 @@ async def main():
             }''')
             print(f"  Статус: {api_response['status']}")
             if api_response['status'] == 200:
+                print(f"  Сырой ответ (первые 1000 символов): {api_response['body'][:1000]}")
                 data = json.loads(api_response['body'])
+                if isinstance(data, dict):
+                    print(f"  Тип: dict, ключи: {list(data.keys())}")
+                else:
+                    print(f"  Тип: list, длина: {len(data)}")
                 raw_signings = parse_api_response(data)
                 print(f"  Получено подписаний: {len(raw_signings)}")
-                if raw_signings:
-                    print(f"  Пример: {json.dumps(raw_signings[0], ensure_ascii=False)[:300]}")
             else:
                 print(f"  Ошибка: {api_response['body'][:200]}")
         except Exception as e:
@@ -200,7 +203,7 @@ async def main():
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(5)
 
-        # --- ШАГ 4: запрос API трейдов через браузерный fetch ---
+        # --- ШАГ 4: запрос API трейдов с диагностикой ---
         print("Запрос API трейдов...")
         try:
             api_response = await page.evaluate('''async () => {
@@ -215,11 +218,14 @@ async def main():
             }''')
             print(f"  Статус: {api_response['status']}")
             if api_response['status'] == 200:
+                print(f"  Сырой ответ (первые 1000 символов): {api_response['body'][:1000]}")
                 data = json.loads(api_response['body'])
+                if isinstance(data, dict):
+                    print(f"  Тип: dict, ключи: {list(data.keys())}")
+                else:
+                    print(f"  Тип: list, длина: {len(data)}")
                 raw_trades = parse_api_response(data)
                 print(f"  Получено трейдов: {len(raw_trades)}")
-                if raw_trades:
-                    print(f"  Пример: {json.dumps(raw_trades[0], ensure_ascii=False)[:300]}")
             else:
                 print(f"  Ошибка: {api_response['body'][:200]}")
         except Exception as e:
