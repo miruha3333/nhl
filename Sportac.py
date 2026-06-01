@@ -8,7 +8,7 @@ from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
 
-TEAM_MAPPING = {
+TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
     'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN', 'islanders': 'NYI',
     'rangers': 'NYR', 'kings': 'LAK', 'sabres': 'BUF', 'blackhawks': 'CHI', 'golden knights': 'VGK',
@@ -17,6 +17,25 @@ TEAM_MAPPING = {
     'redwings': 'DET', 'maple leafs': 'TOR', 'mapleleafs': 'TOR', 'oilers': 'EDM', 'panthers': 'FLA',
     'lightning': 'TBL', 'stars': 'DAL', 'avalanche': 'COL', 'devils': 'NJD', 'kraken': 'SEA',
     'flames': 'CGY', 'blues': 'STL'
+}
+
+TEAM_MAPPING_SLUG = {
+    'utah': 'UTAH', 'mammoth': 'UTAH', 'utah-mammoth': 'UTAH', 'columbus-blue-jackets': 'CBJ',
+    'nashville-predators': 'NAS', 'anaheim-ducks': 'ANA', 'winnipeg-jets': 'WPG', 'minnesota-wild': 'MIN',
+    'new-york-islanders': 'NYI', 'new-york-rangers': 'NYR', 'los-angeles-kings': 'LAK', 'buffalo-sabres': 'BUF',
+    'chicago-blackhawks': 'CHI', 'vegas-golden-knights': 'VGK', 'vancouver-canucks': 'VAN',
+    'philadelphia-flyers': 'PHI', 'boston-bruins': 'BOS', 'san-jose-sharks': 'SJS',
+    'carolina-hurricanes': 'CAR', 'pittsburgh-penguins': 'PIT', 'washington-capitals': 'WSH',
+    'montreal-canadiens': 'MTL', 'ottawa-senators': 'OTT', 'detroit-red-wings': 'DET',
+    'toronto-maple-leafs': 'TOR', 'edmonton-oilers': 'EDM', 'florida-panthers': 'FLA',
+    'tampa-bay-lightning': 'TBL', 'dallas-stars': 'DAL', 'colorado-avalanche': 'COL',
+    'new-jersey-devils': 'NJD', 'seattle-kraken': 'SEA', 'calgary-flames': 'CGY', 'st-louis-blues': 'STL',
+    'blue-jackets': 'CBJ', 'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN',
+    'islanders': 'NYI', 'rangers': 'NYR', 'kings': 'LAK', 'sabres': 'BUF', 'blackhawks': 'CHI',
+    'golden-knights': 'VGK', 'canucks': 'VAN', 'flyers': 'PHI', 'bruins': 'BOS', 'sharks': 'SJS',
+    'hurricanes': 'CAR', 'penguins': 'PIT', 'capitals': 'WSH', 'canadiens': 'MTL', 'senators': 'OTT',
+    'red-wings': 'DET', 'maple-leafs': 'TOR', 'oilers': 'EDM', 'panthers': 'FLA', 'lightning': 'TBL',
+    'stars': 'DAL', 'avalanche': 'COL', 'devils': 'NJD', 'kraken': 'SEA', 'flames': 'CGY', 'blues': 'STL'
 }
 
 RUS_TEAM_MAPPING = {
@@ -53,6 +72,19 @@ RUS_TEAM_MAPPING = {
     'Winnipeg Jets': {'main': 'Виннипег обменял', 'from': 'из Виннипега'}
 }
 
+INJURY_MAPPING = {
+    "lower body": "травма нижней части тела", "undisclosed": "характер травмы не разглашается",
+    "hip": "травма бедра", "kneecap": "травма коленной чашечки", "upper body": "травма верхней части тела",
+    "ear": "травма уха", "ankle": "травма лодыжки", "foot (leg)": "травма ноги", "heel": "травма пятки",
+    "abdomen": "травма брюшной полости", "collarbone": "травма ключицы", "hamstring": "травма задней поверхности бедра",
+    "ribs": "травма ребра", "shoulder": "травма плеча", "face": "травма лица", "concussion": "сотрясение мозга",
+    "hand": "травма руки", "groin": "травма паха", "personal": "личная причина", "finger": "травма пальца",
+    "thumb": "травма большого пальца", "lower leg": "травма голени", "achilles": "травма ахилла"
+}
+
+WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
+
+NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.txt"
 
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
@@ -69,7 +101,6 @@ def get_last_cached_signature():
 def save_to_cache_and_commit(new_signature):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         f.write(new_signature)
-
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
@@ -104,14 +135,18 @@ def send_to_telegram(text):
         except Exception as e:
             print(f"Ошибка отправки: {e}")
 
-def get_team_abbr(team_name_raw):
+def get_team_abbr_by_name(team_name_raw):
     if not team_name_raw:
         return ""
     clean_name = re.sub(r'<[^>]+>', '', str(team_name_raw)).lower().strip()
-    for team_key, abbr in TEAM_MAPPING.items():
+    for team_key, abbr in TEAM_MAPPING_ABBR.items():
         if team_key in clean_name:
             return f"({abbr})"
     return f"({clean_name[:3].upper()})"
+
+def get_team_abbr_by_slug(slug):
+    key = slug.split('/')[-1]
+    return TEAM_MAPPING_SLUG.get(key, key.upper())
 
 def format_years(years_raw):
     try:
@@ -146,6 +181,16 @@ def translate_trade(text):
         return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
     return text
 
+def translate_injury(raw):
+    return INJURY_MAPPING.get(raw.lower().strip(), raw)
+
+def format_name(n):
+    n = n.replace('\n', ' ').strip()
+    if "," in n:
+        parts = n.split(",")
+        return f"{parts[1].strip()} {parts[0].strip()}"
+    return n
+
 def extract_list(data):
     try:
         if isinstance(data, list):
@@ -175,10 +220,8 @@ async def fetch_api(page, url, label):
                 const text = await resp.text();
                 return {status: resp.status, body: text};
             }''', url)
-
             status = api_response['status']
             print(f"  {label} попытка {attempt + 1}: статус {status}")
-
             if status == 200:
                 data = json.loads(api_response['body'])
                 result = extract_list(data)
@@ -195,9 +238,22 @@ async def fetch_api(page, url, label):
             await asyncio.sleep(5)
     return []
 
+async def get_team_from_profile(page, player_url):
+    await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
+    await asyncio.sleep(1500 / 1000)
+    all_team_links = await page.eval_on_selector_all(
+        "a[href*='/team/']",
+        "els => els.map(e => e.getAttribute('href'))"
+    )
+    if len(all_team_links) > NAV_LINKS_COUNT:
+        return get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
+    return "UNK"
+
 async def main():
     raw_signings = []
     raw_trades = []
+    injury_entries = []
+    waiver_entries = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -218,17 +274,63 @@ async def main():
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
+        # --- ТРАВМЫ ---
+        print("Открываем страницу травм...")
+        await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(2)
+
+        rows = await page.query_selector_all("tbody.divide-y tr")
+        raw_injury_entries = []
+        for row in rows[:3]:
+            cells = await row.query_selector_all("td")
+            if not cells:
+                continue
+            name_link = await cells[0].query_selector("a.pp_link")
+            player_url = await name_link.get_attribute("href") if name_link else None
+            name = format_name(await cells[0].inner_text())
+            reason = translate_injury((await cells[3].inner_text()).strip())
+            raw_injury_entries.append((name, reason, player_url))
+
+        for name, reason, player_url in raw_injury_entries:
+            if player_url:
+                team_abbr = await get_team_from_profile(page, player_url)
+            else:
+                team_abbr = "UNK"
+            injury_entries.append(f"{name} ({team_abbr}), {reason}")
+            print(f"  Травма: {name} ({team_abbr}), {reason}")
+
+        # --- УЭЙВЕР ---
+        print("Открываем страницу уэйвера...")
+        await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(2)
+
+        rows = await page.query_selector_all("tr")
+        count = 0
+        for row in rows:
+            cells = await row.query_selector_all("td")
+            if len(cells) >= 3:
+                name = format_name((await cells[0].inner_text()).strip())
+                team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
+                team_abbr = get_team_abbr_by_slug(team_full)
+                res = (await cells[2].inner_text()).strip().lower()
+                line = f"{name} ({team_abbr}) {WAIVER_MAPPING.get(res, res)}"
+                waiver_entries.append(line)
+                print(f"  Уэйвер: {line}")
+                count += 1
+                if count >= 3:
+                    break
+
         await browser.close()
 
+    # --- ПРОВЕРКА ЗАГРУЗКИ ---
     if not raw_signings:
         print("Подписания не загрузились. Операция прервана.")
         return
-
     if not raw_trades:
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    print(f"Успешно получено. Подписаний: {len(raw_signings)}, Трейдов: {len(raw_trades)}")
+    print(f"Успешно получено. Подписаний: {len(raw_signings)}, Трейдов: {len(raw_trades)}, Травм: {len(injury_entries)}, Уэйвер: {len(waiver_entries)}")
 
     # --- ФОРМИРОВАНИЕ ПОДПИСАНИЙ ---
     s_list = []
@@ -240,7 +342,6 @@ async def main():
         name = f"{p_fn} {p_ln}".strip()
         if not name:
             continue
-
         s_cache_parts.append(name)
 
         lvl = str(item.get('lvl', '')).upper()
@@ -266,7 +367,7 @@ async def main():
         else:
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
 
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr(team_name)}"
+        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
         s_list.append(line)
 
     # --- ФОРМИРОВАНИЕ ТРЕЙДОВ ---
@@ -282,19 +383,38 @@ async def main():
             unique_trades.append(translated)
 
     t_list = unique_trades[:3]
-    t_cache_parts = [t for t in t_list]
 
-    # --- ПРОВЕРКА КЭША ---
-    # Сравниваем имена игроков и полные тексты трейдов отдельно через разделитель
-    current_signature = "|".join(s_cache_parts) + "||" + "|".join(t_cache_parts)
+    # --- ФОРМИРОВАНИЕ КЭША ---
+    # Секции разделены через "|||" чтобы не путать с данными
+    current_signature = (
+        "SIGN:" + "|".join(s_cache_parts) +
+        "|||TRADES:" + "|".join(t_list) +
+        "|||INJURIES:" + "|".join(injury_entries) +
+        "|||WAIVERS:" + "|".join(waiver_entries)
+    )
     last_cached_signature = get_last_cached_signature()
 
     if current_signature == last_cached_signature:
         print("Новых событий нет. Скрипт завершен без отправки.")
         return
 
-    # --- ОТПРАВКА ---
-    message = f"🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n{chr(10).join([s + chr(10) for s in s_list])}\n🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n{chr(10).join([t + chr(10) for t in t_list])}"
+    # --- ФОРМИРОВАНИЕ СООБЩЕНИЯ ---
+    parts = []
+
+    if s_list:
+        parts.append("🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n" + "\n\n".join(s_list))
+
+    if t_list:
+        parts.append("🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n" + "\n\n".join(t_list))
+
+    if injury_entries:
+        parts.append("🏥 3 ПОСЛЕДНИХ ТРАВМЫ:\n\n" + "\n\n".join(injury_entries))
+
+    if waiver_entries:
+        parts.append("📋 3 ПОСЛЕДНИХ УЭЙВЕРА:\n\n" + "\n\n".join(waiver_entries))
+
+    message = "\n\n".join(parts)
+
     send_to_telegram(message)
     save_to_cache_and_commit(current_signature)
     print("Сообщение отправлено в Telegram.")
