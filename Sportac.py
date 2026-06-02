@@ -85,22 +85,29 @@ INJURY_MAPPING = {
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
 NAV_LINKS_COUNT = 64
-CACHE_FILE = "last_data_cache.txt"
+CACHE_FILE = "last_data_cache.json"
 
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+# --- КЭШ (JSON) ---
+# Структура: {"signings": [...], "trades": [...], "injuries": [...], "waivers": [...]}
+# Каждый раздел хранит последние 10 записей для надёжного сравнения
 
-def get_last_cached_signature():
+def load_cache():
     if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return ""
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    return {"signings": [], "trades": [], "injuries": [], "waivers": []}
 
-def save_to_cache_and_commit(new_signature):
+def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        f.write(new_signature)
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+def commit_cache():
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
@@ -108,11 +115,24 @@ def save_to_cache_and_commit(new_signature):
             subprocess.run(["git", "add", CACHE_FILE], check=True)
             status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
             if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша последних событий [skip ci]"], check=True)
+                subprocess.run(["git", "commit", "-m", "Обновление кэша [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
-                print("Кэш успешно сохранен в репозиторий GitHub.")
+                print("Кэш сохранён в репозиторий.")
         except Exception as e:
-            print(f"Не удалось сохранить кэш в Git: {e}")
+            print(f"Ошибка сохранения кэша: {e}")
+
+def find_new_items(current_list, cached_list):
+    """Возвращает только те элементы из current_list, которых нет в cached_list"""
+    cached_set = set(cached_list)
+    return [item for item in current_list if item not in cached_set]
+
+def update_cache_section(cached_list, current_list, max_size=10):
+    """Добавляет новые элементы в начало кэша, обрезает до max_size"""
+    new_items = find_new_items(current_list, cached_list)
+    updated = new_items + cached_list
+    return updated[:max_size]
+
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -127,7 +147,7 @@ def send_to_telegram(text):
     if not token or not chat_id:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    max_len = 3500
+    max_len = 4000
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
         try:
@@ -240,7 +260,7 @@ async def fetch_api(page, url, label):
 
 async def get_team_from_profile(page, player_url):
     await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
-    await asyncio.sleep(1500 / 1000)
+    await asyncio.sleep(1.5)
     all_team_links = await page.eval_on_selector_all(
         "a[href*='/team/']",
         "els => els.map(e => e.getAttribute('href'))"
@@ -252,8 +272,8 @@ async def get_team_from_profile(page, player_url):
 async def main():
     raw_signings = []
     raw_trades = []
-    injury_entries = []
-    waiver_entries = []
+    current_injuries = []
+    current_waivers = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -278,7 +298,6 @@ async def main():
         print("Открываем страницу травм...")
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
-
         rows = await page.query_selector_all("tbody.divide-y tr")
         raw_injury_entries = []
         for row in rows[:3]:
@@ -292,18 +311,15 @@ async def main():
             raw_injury_entries.append((name, reason, player_url))
 
         for name, reason, player_url in raw_injury_entries:
-            if player_url:
-                team_abbr = await get_team_from_profile(page, player_url)
-            else:
-                team_abbr = "UNK"
-            injury_entries.append(f"{name} ({team_abbr}), {reason}")
-            print(f"  Травма: {name} ({team_abbr}), {reason}")
+            team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
+            line = f"{name} ({team_abbr}), {reason}"
+            current_injuries.append(line)
+            print(f"  Травма: {line}")
 
         # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
         await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
-
         rows = await page.query_selector_all("tr")
         count = 0
         for row in rows:
@@ -314,7 +330,7 @@ async def main():
                 team_abbr = get_team_abbr_by_slug(team_full)
                 res = (await cells[2].inner_text()).strip().lower()
                 line = f"{name} ({team_abbr}) {WAIVER_MAPPING.get(res, res)}"
-                waiver_entries.append(line)
+                current_waivers.append(line)
                 print(f"  Уэйвер: {line}")
                 count += 1
                 if count >= 3:
@@ -330,19 +346,14 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    print(f"Успешно получено. Подписаний: {len(raw_signings)}, Трейдов: {len(raw_trades)}, Травм: {len(injury_entries)}, Уэйвер: {len(waiver_entries)}")
-
     # --- ФОРМИРОВАНИЕ ПОДПИСАНИЙ ---
-    s_list = []
-    s_cache_parts = []
-
-    for item in raw_signings[:3]:
+    current_signings = []
+    for item in raw_signings[:10]:
         p_fn = str(item.get('p_fn', '')).strip()
         p_ln = str(item.get('p_ln', '')).strip()
         name = f"{p_fn} {p_ln}".strip()
         if not name:
             continue
-        s_cache_parts.append(name)
 
         lvl = str(item.get('lvl', '')).upper()
         cap_hit = item.get('cap_hit', 0) or 0
@@ -368,56 +379,48 @@ async def main():
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
 
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
-        s_list.append(line)
+        current_signings.append(line)
 
     # --- ФОРМИРОВАНИЕ ТРЕЙДОВ ---
+    current_trades = []
     seen = set()
-    unique_trades = []
-    for item in raw_trades:
+    for item in raw_trades[:10]:
         text = str(item.get('details_nolinks', '') or item.get('details', '') or '').strip()
         if not text:
             continue
         translated = translate_trade(text)
         if translated not in seen and len(translated) > 20 and "The ID of this channel" not in translated:
             seen.add(translated)
-            unique_trades.append(translated)
+            current_trades.append(translated)
 
-    t_list = unique_trades[:3]
+    # --- СРАВНЕНИЕ С КЭШЕМ ---
+    cache = load_cache()
 
-    # --- ФОРМИРОВАНИЕ КЭША ---
-    # Секции разделены через "|||" чтобы не путать с данными
-    current_signature = (
-        "SIGN:" + "|".join(s_cache_parts) +
-        "|||TRADES:" + "|".join(t_list) +
-        "|||INJURIES:" + "|".join(injury_entries) +
-        "|||WAIVERS:" + "|".join(waiver_entries)
-    )
-    last_cached_signature = get_last_cached_signature()
+    new_signings = find_new_items(current_signings, cache["signings"])
+    new_trades = find_new_items(current_trades, cache["trades"])
+    new_injuries = find_new_items(current_injuries, cache["injuries"])
+    new_waivers = find_new_items(current_waivers, cache["waivers"])
 
-    if current_signature == last_cached_signature:
+    all_new = new_signings + new_trades + new_injuries + new_waivers
+
+    print(f"Новых записей: подписания={len(new_signings)}, трейды={len(new_trades)}, травмы={len(new_injuries)}, уэйвер={len(new_waivers)}")
+
+    if not all_new:
         print("Новых событий нет. Скрипт завершен без отправки.")
         return
 
-    # --- ФОРМИРОВАНИЕ СООБЩЕНИЯ ---
-    parts = []
+    # --- ОБНОВЛЕНИЕ КЭША ---
+    cache["signings"] = update_cache_section(cache["signings"], current_signings)
+    cache["trades"] = update_cache_section(cache["trades"], current_trades)
+    cache["injuries"] = update_cache_section(cache["injuries"], current_injuries)
+    cache["waivers"] = update_cache_section(cache["waivers"], current_waivers)
+    save_cache(cache)
+    commit_cache()
 
-    if s_list:
-        parts.append("🔥 3 ПОСЛЕДНИХ ПОДПИСАНИЯ:\n\n" + "\n\n".join(s_list))
-
-    if t_list:
-        parts.append("🤝 3 ПОСЛЕДНИХ ТРЕЙДА:\n\n" + "\n\n".join(t_list))
-
-    if injury_entries:
-        parts.append("🏥 3 ПОСЛЕДНИХ ТРАВМЫ:\n\n" + "\n\n".join(injury_entries))
-
-    if waiver_entries:
-        parts.append("📋 3 ПОСЛЕДНИХ УЭЙВЕРА:\n\n" + "\n\n".join(waiver_entries))
-
-    message = "\n\n".join(parts)
-
+    # --- ОТПРАВКА ТОЛЬКО НОВЫХ ЗАПИСЕЙ ---
+    message = "\n\n".join(all_new)
     send_to_telegram(message)
-    save_to_cache_and_commit(current_signature)
-    print("Сообщение отправлено в Telegram.")
+    print(f"Отправлено {len(all_new)} новых записей в Telegram.")
 
 if __name__ == "__main__":
     asyncio.run(main())
