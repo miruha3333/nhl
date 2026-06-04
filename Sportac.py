@@ -92,27 +92,63 @@ SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
 # --- КЭШ ---
-# Структура:
+# Новый формат:
 # {
 #   "signings":  {"last_date": "2026-06-01", "last_id": "abc123"},
 #   "trades":    {"last_date": "2026-06-01", "last_id": "1122"},
-#   "injuries":  {"current": [...топ-3 сейчас...], "seen": [...все виденные когда-либо...]},
-#   "waivers":   {"current": [...топ-3 сейчас...], "seen": [...все виденные когда-либо...]}
+#   "injuries":  {"current": [...], "seen": [...]},
+#   "waivers":   {"current": [...], "seen": [...]}
 # }
 
 def load_cache():
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            pass
-    return {
+    """Загружает кэш и автоматически мигрирует старый формат (список) в новый (словарь)."""
+    default = {
         "signings": {"last_date": "", "last_id": ""},
         "trades": {"last_date": "", "last_id": ""},
         "injuries": {"current": [], "seen": []},
         "waivers": {"current": [], "seen": []}
     }
+
+    if not os.path.exists(CACHE_FILE):
+        return default
+
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return default
+
+    # --- Миграция: signings ---
+    # Старый формат: список строк ["Игрок подписал...", ...]
+    # Новый формат: {"last_date": "...", "last_id": "..."}
+    if isinstance(data.get("signings"), list):
+        print("Миграция кэша: signings (список -> словарь)")
+        data["signings"] = {"last_date": "", "last_id": ""}
+
+    # --- Миграция: trades ---
+    if isinstance(data.get("trades"), list):
+        print("Миграция кэша: trades (список -> словарь)")
+        data["trades"] = {"last_date": "", "last_id": ""}
+
+    # --- Миграция: injuries ---
+    # Старый формат: список строк
+    if isinstance(data.get("injuries"), list):
+        print("Миграция кэша: injuries (список -> словарь)")
+        old_list = data["injuries"]
+        data["injuries"] = {"current": old_list, "seen": old_list}
+
+    # --- Миграция: waivers ---
+    if isinstance(data.get("waivers"), list):
+        print("Миграция кэша: waivers (список -> словарь)")
+        old_list = data["waivers"]
+        data["waivers"] = {"current": old_list, "seen": old_list}
+
+    # Заполняем отсутствующие ключи из default
+    for section, default_val in default.items():
+        if section not in data:
+            data[section] = default_val
+
+    return data
 
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
@@ -346,7 +382,7 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    # --- ЗАГРУЖАЕМ КЭШ ---
+    # --- ЗАГРУЖАЕМ КЭШ (с автомиграцией старого формата) ---
     cache = load_cache()
     all_new = []
 
@@ -441,7 +477,6 @@ async def main():
     print(f"Новых травм: {len(new_injuries)}")
     all_new.extend(new_injuries)
 
-    # Обновляем seen — добавляем новые, старые не трогаем
     updated_seen_injuries = list(seen_injuries) + new_injuries
     cache["injuries"]["current"] = current_injuries
     cache["injuries"]["seen"] = updated_seen_injuries
