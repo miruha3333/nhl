@@ -1,36 +1,34 @@
 {
-  "signings": [
-    "Will Cranley подписал контракт на 1 год с кэпхитом 850,000 (STL)",
-    "Ilya Pautov подписал контракт новичка на 3 года с кэпхитом 985,000 (PHI)",
-    "Felix Nilsson подписал контракт новичка на 3 года с кэпхитом 1,028,333 (NAS)",
-    "Benjamin Rautiainen подписал контракт новичка на 3 года с кэпхитом 1,007,500 (TBL)",
-    "Zach Dean подписал контракт на 1 год с кэпхитом 850,000 (STL)",
-    "Gregor Biber подписал контракт новичка на 3 года с кэпхитом 1,002,500 (UTAH)",
-    "Phillip Sinn подписал контракт новичка на 2 года с кэпхитом 1,050,000 (SJS)",
-    "Nikita Novosyolov подписал контракт новичка на 2 года с кэпхитом 980,000 (COL)",
-    "Ilya Safonov подписал контракт на 1 год с кэпхитом 950,000 (VAN)",
-    "Nikita Novosyolov подписал контракт новичка на 2 года с кэпхитом 979,500 (COL)"
-  ],
-  "trades": [
-    "Тампа обменяла a 2027 3rd round pick на Jack Pridham из Чикаго",
-    "The Vegas Golden Knights forfeit a 2026 2nd round pick due to flagrant violations of the 2026 Stanley Cup Playoffs Media Regulations",
-    "Эдмонтон обменял Jayden Grubbe на Josh Bloom из Ванкувера",
-    "Оттава обменяла Hunter Shepard и Jake Chiasson на Riley Kidney из Монреаля",
-    "Лос-Анджелес обменял Samuel Bolduc на Jan Jenik из Оттавы",
-    "Тампа обменяла Michael Milne и Wojciech Stachowiak на Ian Mitchell из Детройта",
-    "Бостон обменял Massimo Rizzo и Dalton Bancroft на Navrin Mutter из Нэшвилла",
-    "Сиэттл обменял a conditional 2027 2nd round pick (CBJ) и a 2026 4th round pick (ANA) на Bobby McMann из Торонто",
-    "Оттава обменяла Wyatt Bongiovanni на Graeme Clarke из Вашингтона",
-    "Вашингтон обменял a 2026 6th round pick на David Kampf из Ванкувера"
-  ],
-  "injuries": [
-    "Valeri Nichushkin (COL), травма нижней части тела",
-    "Max Domi (TOR), Back",
-    "Troy Terry (ANA), травма бедра"
-  ],
-  "waivers": [
-    "Jack Ahcan (COL) прошел драфт отказов",
-    "Lukas Reichel (BOS) прошел драфт отказов",
-    "Michael Pezzetta (TOR) прошел драфт отказов"
-  ]
+  "signings": {
+    "last_date": "2026-06-03",
+    "last_id": "10386"
+  },
+  "trades": {
+    "last_date": "2026-06-01",
+    "last_id": "1123"
+  },
+  "injuries": {
+    "current": [
+      "Valeri Nichushkin (COL), травма нижней части тела",
+      "Max Domi (TOR), Back",
+      "Troy Terry (ANA), травма бедра"
+    ],
+    "seen": [
+      "Troy Terry (ANA), травма бедра",
+      "Max Domi (TOR), Back",
+      "Valeri Nichushkin (COL), травма нижней части тела"
+    ]
+  },
+  "waivers": {
+    "current": [
+      "Jack Ahcan (COL) прошел драфт отказов",
+      "Lukas Reichel (BOS) прошел драфт отказов",
+      "Michael Pezzetta (TOR) прошел драфт отказов"
+    ],
+    "seen": [
+      "Michael Pezzetta (TOR) прошел драфт отказов",
+      "Lukas Reichel (BOS) прошел драфт отказов",
+      "Jack Ahcan (COL) прошел драфт отказов"
+    ]
+  }
 }
