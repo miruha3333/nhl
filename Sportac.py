@@ -4,6 +4,7 @@ import re
 import subprocess
 import requests
 import json
+from datetime import datetime
 from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
@@ -90,9 +91,14 @@ CACHE_FILE = "last_data_cache.json"
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
-# --- КЭШ (JSON) ---
-# Структура: {"signings": [...], "trades": [...], "injuries": [...], "waivers": [...]}
-# Каждый раздел хранит последние 10 записей для надёжного сравнения
+# --- КЭШ ---
+# Структура:
+# {
+#   "signings":  {"last_date": "2026-06-01", "last_id": "abc123"},
+#   "trades":    {"last_date": "2026-06-01", "last_id": "1122"},
+#   "injuries":  {"current": [...топ-3 сейчас...], "seen": [...все виденные когда-либо...]},
+#   "waivers":   {"current": [...топ-3 сейчас...], "seen": [...все виденные когда-либо...]}
+# }
 
 def load_cache():
     if os.path.exists(CACHE_FILE):
@@ -101,7 +107,12 @@ def load_cache():
                 return json.load(f)
         except:
             pass
-    return {"signings": [], "trades": [], "injuries": [], "waivers": []}
+    return {
+        "signings": {"last_date": "", "last_id": ""},
+        "trades": {"last_date": "", "last_id": ""},
+        "injuries": {"current": [], "seen": []},
+        "waivers": {"current": [], "seen": []}
+    }
 
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
@@ -120,17 +131,6 @@ def commit_cache():
                 print("Кэш сохранён в репозиторий.")
         except Exception as e:
             print(f"Ошибка сохранения кэша: {e}")
-
-def find_new_items(current_list, cached_list):
-    """Возвращает только те элементы из current_list, которых нет в cached_list"""
-    cached_set = set(cached_list)
-    return [item for item in current_list if item not in cached_set]
-
-def update_cache_section(cached_list, current_list, max_size=10):
-    """Добавляет новые элементы в начало кэша, обрезает до max_size"""
-    new_items = find_new_items(current_list, cached_list)
-    updated = new_items + cached_list
-    return updated[:max_size]
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
@@ -346,9 +346,28 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    # --- ФОРМИРОВАНИЕ ПОДПИСАНИЙ ---
-    current_signings = []
-    for item in raw_signings[:10]:
+    # --- ЗАГРУЖАЕМ КЭШ ---
+    cache = load_cache()
+    all_new = []
+
+    # --- ПОДПИСАНИЯ: по дате и ID из API ---
+    last_sign_date = cache["signings"].get("last_date", "")
+    last_sign_id = cache["signings"].get("last_id", "")
+
+    new_signings_raw = []
+    for item in raw_signings:
+        item_date = str(item.get("sign_date", "") or "")
+        item_id = str(item.get("cid", "") or item.get("id", "") or "")
+        if item_date > last_sign_date:
+            new_signings_raw.append(item)
+        elif item_date == last_sign_date and item_id and item_id != last_sign_id:
+            new_signings_raw.append(item)
+        else:
+            break
+
+    print(f"Новых подписаний: {len(new_signings_raw)}")
+
+    for item in new_signings_raw:
         p_fn = str(item.get('p_fn', '')).strip()
         p_ln = str(item.get('p_ln', '')).strip()
         name = f"{p_fn} {p_ln}".strip()
@@ -379,43 +398,71 @@ async def main():
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
 
         line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
-        current_signings.append(line)
+        all_new.append(line)
 
-    # --- ФОРМИРОВАНИЕ ТРЕЙДОВ ---
-    current_trades = []
-    seen = set()
-    for item in raw_trades[:10]:
+    if raw_signings:
+        cache["signings"]["last_date"] = str(raw_signings[0].get("sign_date", "") or "")
+        cache["signings"]["last_id"] = str(raw_signings[0].get("cid", "") or raw_signings[0].get("id", "") or "")
+
+    # --- ТРЕЙДЫ: по дате и ID из API ---
+    last_trade_date = cache["trades"].get("last_date", "")
+    last_trade_id = cache["trades"].get("last_id", "")
+
+    new_trades_raw = []
+    for item in raw_trades:
+        item_date = str(item.get("trade_date", "") or "")
+        item_id = str(item.get("trade_id", "") or "")
+        if item_date > last_trade_date:
+            new_trades_raw.append(item)
+        elif item_date == last_trade_date and item_id and item_id != last_trade_id:
+            new_trades_raw.append(item)
+        else:
+            break
+
+    print(f"Новых трейдов: {len(new_trades_raw)}")
+
+    seen_trades = set()
+    for item in new_trades_raw:
         text = str(item.get('details_nolinks', '') or item.get('details', '') or '').strip()
-        if not text:
+        if not text or len(text) < 20:
             continue
         translated = translate_trade(text)
-        if translated not in seen and len(translated) > 20 and "The ID of this channel" not in translated:
-            seen.add(translated)
-            current_trades.append(translated)
+        if translated not in seen_trades and "The ID of this channel" not in translated:
+            seen_trades.add(translated)
+            all_new.append(translated)
 
-    # --- СРАВНЕНИЕ С КЭШЕМ ---
-    cache = load_cache()
+    if raw_trades:
+        cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
+        cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
-    new_signings = find_new_items(current_signings, cache["signings"])
-    new_trades = find_new_items(current_trades, cache["trades"])
-    new_injuries = find_new_items(current_injuries, cache["injuries"])
-    new_waivers = find_new_items(current_waivers, cache["waivers"])
+    # --- ТРАВМЫ: current = топ-3 сейчас, seen = все виденные когда-либо ---
+    seen_injuries = set(cache["injuries"].get("seen", []))
+    new_injuries = [line for line in current_injuries if line not in seen_injuries]
+    print(f"Новых травм: {len(new_injuries)}")
+    all_new.extend(new_injuries)
 
-    all_new = new_signings + new_trades + new_injuries + new_waivers
+    # Обновляем seen — добавляем новые, старые не трогаем
+    updated_seen_injuries = list(seen_injuries) + new_injuries
+    cache["injuries"]["current"] = current_injuries
+    cache["injuries"]["seen"] = updated_seen_injuries
 
-    print(f"Новых записей: подписания={len(new_signings)}, трейды={len(new_trades)}, травмы={len(new_injuries)}, уэйвер={len(new_waivers)}")
+    # --- УЭЙВЕР: current = топ-3 сейчас, seen = все виденные когда-либо ---
+    seen_waivers = set(cache["waivers"].get("seen", []))
+    new_waivers = [line for line in current_waivers if line not in seen_waivers]
+    print(f"Новых уэйверов: {len(new_waivers)}")
+    all_new.extend(new_waivers)
+
+    updated_seen_waivers = list(seen_waivers) + new_waivers
+    cache["waivers"]["current"] = current_waivers
+    cache["waivers"]["seen"] = updated_seen_waivers
+
+    # --- СОХРАНЯЕМ КЭШ В ЛЮБОМ СЛУЧАЕ ---
+    save_cache(cache)
+    commit_cache()
 
     if not all_new:
         print("Новых событий нет. Скрипт завершен без отправки.")
         return
-
-    # --- ОБНОВЛЕНИЕ КЭША ---
-    cache["signings"] = update_cache_section(cache["signings"], current_signings)
-    cache["trades"] = update_cache_section(cache["trades"], current_trades)
-    cache["injuries"] = update_cache_section(cache["injuries"], current_injuries)
-    cache["waivers"] = update_cache_section(cache["waivers"], current_waivers)
-    save_cache(cache)
-    commit_cache()
 
     # --- ОТПРАВКА ТОЛЬКО НОВЫХ ЗАПИСЕЙ ---
     message = "\n\n".join(all_new)
