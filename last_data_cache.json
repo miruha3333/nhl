@@ -1,7 +1,7 @@
 {
   "signings": {
     "last_date": "2026-06-04",
-    "last_id": "10388"
+    "last_id": "10389"
   },
   "trades": {
     "last_date": "2026-06-01",
@@ -9,14 +9,15 @@
   },
   "injuries": {
     "current": [
+      "Brayden McNabb (VGK), травма лица",
       "Valeri Nichushkin (COL), травма нижней части тела",
-      "Max Domi (TOR), Back",
-      "Troy Terry (ANA), травма бедра"
+      "Max Domi (TOR), Back"
     ],
     "seen": [
       "Valeri Nichushkin (COL), травма нижней части тела",
       "Max Domi (TOR), Back",
-      "Troy Terry (ANA), травма бедра"
+      "Troy Terry (ANA), травма бедра",
+      "Brayden McNabb (VGK), травма лица"
     ]
   },
   "waivers": {
@@ -26,9 +27,9 @@
       "Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Lukas Reichel (BOS) прошел драфт отказов",
+      "Michael Pezzetta (TOR) прошел драфт отказов",
       "Jack Ahcan (COL) прошел драфт отказов",
-      "Michael Pezzetta (TOR) прошел драфт отказов"
+      "Lukas Reichel (BOS) прошел драфт отказов"
     ]
   }
 }
