@@ -348,7 +348,7 @@ async def main():
 
         for name, reason, player_url in raw_injury_entries:
             team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
-            line = f"{name} ({team_abbr}), {reason}"
+            line = f"❌ {name} ({team_abbr}), {reason}"
             current_injuries.append(line)
             print(f"  Травма: {line}")
 
@@ -365,7 +365,14 @@ async def main():
                 team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
                 team_abbr = get_team_abbr_by_slug(team_full)
                 res = (await cells[2].inner_text()).strip().lower()
-                line = f"{name} ({team_abbr}) {WAIVER_MAPPING.get(res, res)}"
+                waiver_text = WAIVER_MAPPING.get(res, res)
+                if res == "claimed":
+                    emoji = "⬆️"
+                elif res == "cleared":
+                    emoji = "⬅️"
+                else:
+                    emoji = "➡️"
+                line = f"{emoji} {name} ({team_abbr}) {waiver_text}"
                 current_waivers.append(line)
                 print(f"  Уэйвер: {line}")
                 count += 1
@@ -433,7 +440,7 @@ async def main():
         else:
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
 
-        line = f"{name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
+        line = f"📝 {name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
         all_new.append(line)
 
     if raw_signings:
@@ -465,7 +472,7 @@ async def main():
         translated = translate_trade(text)
         if translated not in seen_trades and "The ID of this channel" not in translated:
             seen_trades.add(translated)
-            all_new.append(translated)
+            all_new.append(f"🔄 {translated}")
 
     if raw_trades:
         cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
