@@ -8,35 +8,27 @@
     "last_id": "1123"
   },
   "injuries": {
-    "current": [
-      "❌ Brayden McNabb (VGK), травма лица",
-      "❌ Valeri Nichushkin (COL), травма нижней части тела",
-      "❌ Max Domi (TOR), Back"
-    ],
+    "current": [],
     "seen": [
-      "❌ Max Domi (TOR), Back",
-      "Valeri Nichushkin (COL), травма нижней части тела",
       "Max Domi (TOR), Back",
+      "Troy Terry (ANA), травма бедра",
       "❌ Brayden McNabb (VGK), травма лица",
-      "❌ Brayden McNabb (UNK), травма лица",
-      "Brayden McNabb (VGK), травма лица",
       "❌ Valeri Nichushkin (COL), травма нижней части тела",
-      "Troy Terry (ANA), травма бедра"
+      "Valeri Nichushkin (COL), травма нижней части тела",
+      "❌ Max Domi (TOR), Back",
+      "❌ Brayden McNabb (UNK), травма лица",
+      "Brayden McNabb (VGK), травма лица"
     ]
   },
   "waivers": {
-    "current": [
-      "⬅️ Jack Ahcan (COL) прошел драфт отказов",
-      "⬅️ Lukas Reichel (BOS) прошел драфт отказов",
-      "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
-    ],
+    "current": [],
     "seen": [
+      "Lukas Reichel (BOS) прошел драфт отказов",
+      "⬅️ Michael Pezzetta (TOR) прошел драфт отказов",
+      "⬅️ Jack Ahcan (COL) прошел драфт отказов",
       "Jack Ahcan (COL) прошел драфт отказов",
       "Michael Pezzetta (TOR) прошел драфт отказов",
-      "Lukas Reichel (BOS) прошел драфт отказов",
-      "⬅️ Jack Ahcan (COL) прошел драфт отказов",
-      "⬅️ Lukas Reichel (BOS) прошел драфт отказов",
-      "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
+      "⬅️ Lukas Reichel (BOS) прошел драфт отказов"
     ]
   }
 }
