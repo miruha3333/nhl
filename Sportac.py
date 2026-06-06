@@ -92,16 +92,18 @@ SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
 # --- КЭШ ---
-# Новый формат:
+# Формат:
 # {
 #   "signings":  {"last_date": "2026-06-01", "last_id": "abc123"},
 #   "trades":    {"last_date": "2026-06-01", "last_id": "1122"},
-#   "injuries":  {"current": [...], "seen": [...]},
-#   "waivers":   {"current": [...], "seen": [...]}
+#   "injuries":  {"current": [...полные строки...], "seen": [...только имена игроков...]},
+#   "waivers":   {"current": [...полные строки...], "seen": [...только имена игроков...]}
 # }
+# seen для травм и уэйвера хранит ТОЛЬКО имена игроков — сравнение нечувствительно
+# к смене команды, эмодзи и формата строки.
 
 def load_cache():
-    """Загружает кэш и автоматически мигрирует старый формат (список) в новый (словарь)."""
+    """Загружает кэш и автоматически мигрирует любой старый формат в новый."""
     default = {
         "signings": {"last_date": "", "last_id": ""},
         "trades": {"last_date": "", "last_id": ""},
@@ -118,32 +120,39 @@ def load_cache():
     except Exception:
         return default
 
-    # --- Миграция: signings ---
-    # Старый формат: список строк ["Игрок подписал...", ...]
-    # Новый формат: {"last_date": "...", "last_id": "..."}
+    # Миграция: signings
     if isinstance(data.get("signings"), list):
         print("Миграция кэша: signings (список -> словарь)")
         data["signings"] = {"last_date": "", "last_id": ""}
 
-    # --- Миграция: trades ---
+    # Миграция: trades
     if isinstance(data.get("trades"), list):
         print("Миграция кэша: trades (список -> словарь)")
         data["trades"] = {"last_date": "", "last_id": ""}
 
-    # --- Миграция: injuries ---
-    # Старый формат: список строк
+    # Миграция: injuries — если seen содержит полные строки, а не имена,
+    # сбрасываем seen чтобы не было дублей из-за смены формата
     if isinstance(data.get("injuries"), list):
         print("Миграция кэша: injuries (список -> словарь)")
-        old_list = data["injuries"]
-        data["injuries"] = {"current": old_list, "seen": old_list}
+        data["injuries"] = {"current": [], "seen": []}
+    elif isinstance(data.get("injuries"), dict):
+        seen = data["injuries"].get("seen", [])
+        # Если в seen лежат полные строки с эмодзи или скобками — это старый формат, сбрасываем
+        if seen and any("(" in s or "❌" in s for s in seen):
+            print("Миграция кэша: injuries.seen (полные строки -> только имена), сброс")
+            data["injuries"]["seen"] = []
 
-    # --- Миграция: waivers ---
+    # Миграция: waivers
     if isinstance(data.get("waivers"), list):
         print("Миграция кэша: waivers (список -> словарь)")
-        old_list = data["waivers"]
-        data["waivers"] = {"current": old_list, "seen": old_list}
+        data["waivers"] = {"current": [], "seen": []}
+    elif isinstance(data.get("waivers"), dict):
+        seen = data["waivers"].get("seen", [])
+        if seen and any("(" in s or "⬆️" in s or "⬅️" in s or "➡️" in s for s in seen):
+            print("Миграция кэша: waivers.seen (полные строки -> только имена), сброс")
+            data["waivers"]["seen"] = []
 
-    # Заполняем отсутствующие ключи из default
+    # Заполняем отсутствующие ключи
     for section, default_val in default.items():
         if section not in data:
             data[section] = default_val
@@ -169,6 +178,16 @@ def commit_cache():
             print(f"Ошибка сохранения кэша: {e}")
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+def extract_player_name(line):
+    """Извлекает чистое имя игрока из форматированной строки.
+    Пример: '❌ Brayden McNabb (VGK), травма лица' -> 'Brayden McNabb'
+    Пример: '⬅️ Jack Ahcan (COL) прошел драфт отказов' -> 'Jack Ahcan'
+    """
+    # Убираем все эмодзи и лишние пробелы, берём всё до первой скобки
+    clean = line.replace("❌", "").replace("⬆️", "").replace("⬅️", "").replace("➡️", "").replace("📝", "").replace("🔄", "")
+    name = clean.split("(")[0].strip()
+    return name
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -389,7 +408,7 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    # --- ЗАГРУЖАЕМ КЭШ (с автомиграцией старого формата) ---
+    # --- ЗАГРУЖАЕМ КЭШ (с автомиграцией) ---
     cache = load_cache()
     all_new = []
 
@@ -478,25 +497,38 @@ async def main():
         cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
         cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
-    # --- ТРАВМЫ: current = топ-3 сейчас, seen = все виденные когда-либо ---
-    seen_injuries = set(cache["injuries"].get("seen", []))
-    new_injuries = [line for line in current_injuries if line not in seen_injuries]
+    # --- ТРАВМЫ: сравниваем только по имени игрока ---
+    # seen хранит только имена — нечувствительно к смене команды, эмодзи и формата
+    seen_injury_names = set(cache["injuries"].get("seen", []))
+    new_injuries = []
+    new_injury_names = []
+    for line in current_injuries:
+        player_name = extract_player_name(line)
+        if player_name and player_name not in seen_injury_names:
+            new_injuries.append(line)
+            new_injury_names.append(player_name)
+
     print(f"Новых травм: {len(new_injuries)}")
     all_new.extend(new_injuries)
 
-    updated_seen_injuries = list(seen_injuries) + new_injuries
     cache["injuries"]["current"] = current_injuries
-    cache["injuries"]["seen"] = updated_seen_injuries
+    cache["injuries"]["seen"] = list(seen_injury_names) + new_injury_names
 
-    # --- УЭЙВЕР: current = топ-3 сейчас, seen = все виденные когда-либо ---
-    seen_waivers = set(cache["waivers"].get("seen", []))
-    new_waivers = [line for line in current_waivers if line not in seen_waivers]
+    # --- УЭЙВЕР: сравниваем только по имени игрока ---
+    seen_waiver_names = set(cache["waivers"].get("seen", []))
+    new_waivers = []
+    new_waiver_names = []
+    for line in current_waivers:
+        player_name = extract_player_name(line)
+        if player_name and player_name not in seen_waiver_names:
+            new_waivers.append(line)
+            new_waiver_names.append(player_name)
+
     print(f"Новых уэйверов: {len(new_waivers)}")
     all_new.extend(new_waivers)
 
-    updated_seen_waivers = list(seen_waivers) + new_waivers
     cache["waivers"]["current"] = current_waivers
-    cache["waivers"]["seen"] = updated_seen_waivers
+    cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
 
     # --- СОХРАНЯЕМ КЭШ В ЛЮБОМ СЛУЧАЕ ---
     save_cache(cache)
