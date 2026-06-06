@@ -8,11 +8,15 @@
     "last_id": "1123"
   },
   "injuries": {
-    "current": [],
+    "current": [
+      "❌ Brayden McNabb (VGK), травма лица",
+      "❌ Valeri Nichushkin (COL), травма нижней части тела",
+      "❌ Max Domi (TOR), Back"
+    ],
     "seen": [
-      "Max Domi",
       "Valeri Nichushkin",
-      "Brayden McNabb"
+      "Brayden McNabb",
+      "Max Domi"
     ]
   },
   "waivers": {
@@ -23,8 +27,8 @@
     ],
     "seen": [
       "Jack Ahcan",
-      "Lukas Reichel",
-      "Michael Pezzetta"
+      "Michael Pezzetta",
+      "Lukas Reichel"
     ]
   }
 }
