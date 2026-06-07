@@ -14,18 +14,22 @@
       "❌ Max Domi (TOR), Back"
     ],
     "seen": [
-      "Max Domi",
-      "Valeri Nichushkin",
       "Brayden McNabb",
+      "Valeri Nichushkin",
+      "Max Domi",
       "William Carrier"
     ]
   },
   "waivers": {
-    "current": [],
+    "current": [
+      "⬅️ Jack Ahcan (COL) прошел драфт отказов",
+      "⬅️ Lukas Reichel (BOS) прошел драфт отказов",
+      "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
+    ],
     "seen": [
       "Michael Pezzetta",
-      "Jack Ahcan",
-      "Lukas Reichel"
+      "Lukas Reichel",
+      "Jack Ahcan"
     ]
   }
 }
