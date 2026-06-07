@@ -1,7 +1,7 @@
 {
   "signings": {
-    "last_date": "2026-06-05",
-    "last_id": "10392"
+    "last_date": "2026-06-07",
+    "last_id": "10393"
   },
   "trades": {
     "last_date": "2026-06-01",
@@ -14,10 +14,10 @@
       "❌ Max Domi (TOR), Back"
     ],
     "seen": [
-      "Brayden McNabb",
+      "Max Domi",
       "Valeri Nichushkin",
-      "William Carrier",
-      "Max Domi"
+      "Brayden McNabb",
+      "William Carrier"
     ]
   },
   "waivers": {
@@ -27,9 +27,9 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Michael Pezzetta",
       "Lukas Reichel",
-      "Jack Ahcan"
+      "Jack Ahcan",
+      "Michael Pezzetta"
     ]
   }
 }
