@@ -9,14 +9,15 @@
   },
   "injuries": {
     "current": [
-      "❌ Brayden McNabb (VGK), травма лица",
+      "❌ William Carrier (CAR), травма верхней части тела",
       "❌ Valeri Nichushkin (COL), травма нижней части тела",
       "❌ Max Domi (TOR), Back"
     ],
     "seen": [
-      "Brayden McNabb",
+      "Valeri Nichushkin",
       "Max Domi",
-      "Valeri Nichushkin"
+      "Brayden McNabb",
+      "William Carrier"
     ]
   },
   "waivers": {
@@ -26,9 +27,9 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Lukas Reichel",
       "Michael Pezzetta",
-      "Jack Ahcan"
+      "Jack Ahcan",
+      "Lukas Reichel"
     ]
   }
 }
