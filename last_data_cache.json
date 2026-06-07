@@ -21,15 +21,11 @@
     ]
   },
   "waivers": {
-    "current": [
-      "⬅️ Jack Ahcan (COL) прошел драфт отказов",
-      "⬅️ Lukas Reichel (BOS) прошел драфт отказов",
-      "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
-    ],
+    "current": [],
     "seen": [
-      "Lukas Reichel",
+      "Michael Pezzetta",
       "Jack Ahcan",
-      "Michael Pezzetta"
+      "Lukas Reichel"
     ]
   }
 }
