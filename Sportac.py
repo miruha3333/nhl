@@ -138,13 +138,15 @@ def load_cache():
         data["injuries"] = {"current": [], "seen": [], "details": {}}
     elif isinstance(data.get("injuries"), dict):
         inj = data["injuries"]
-        # Добавляем details если его нет (новое поле)
         if "details" not in inj:
             inj["details"] = {}
-        # Если seen содержит полные строки — сбрасываем
+        # Если seen ИЛИ current содержат полные строки (с эмодзи или скобками) — сбрасываем всё
         seen = inj.get("seen", [])
-        if seen and any("(" in s or "❌" in s for s in seen):
-            print("Миграция кэша: injuries.seen (полные строки -> только имена), сброс")
+        current = inj.get("current", [])
+        has_old_seen = bool(seen and any("(" in s or "❌" in s or "✅" in s for s in seen))
+        has_old_current = bool(current and any("(" in s or "❌" in s or "✅" in s for s in current))
+        if has_old_seen or has_old_current:
+            print("Миграция кэша: injuries (полные строки -> только имена), сброс current и seen")
             inj["seen"] = []
             inj["current"] = []
             inj["details"] = {}
