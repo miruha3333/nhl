@@ -366,18 +366,6 @@ async def main():
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
 
-        # ВРЕМЕННАЯ ДИАГНОСТИКА — удалить после отладки
-        html_snippet = await page.evaluate("""() => {
-            const rows = document.querySelectorAll('tr');
-            const result = [];
-            for (let i = 0; i < Math.min(rows.length, 10); i++) {
-                result.push(rows[i].innerHTML.substring(0, 300));
-            }
-            return result;
-        }""")
-        for i, h in enumerate(html_snippet):
-            print(f"ROW {i}: {h}")
-
         # Собираем ВСЕ строки таблицы — ищем любые tr у которых есть ссылка на профиль игрока.
         # Это надёжнее чем tbody.divide-y — не зависит от разделителей по командам.
         all_player_rows = await page.query_selector_all("tr:has(a.pp_link)")
