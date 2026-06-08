@@ -365,29 +365,39 @@ async def main():
         print("Открываем страницу травм...")
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
-        rows = await page.query_selector_all("tbody.divide-y tr")
 
-        # Проход 1: собираем ВСЕ имена со страницы — без заходов в профили, только DOM
-        for row in rows:
+        # Собираем ВСЕ строки таблицы — ищем любые tr у которых есть ссылка на профиль игрока.
+        # Это надёжнее чем tbody.divide-y — не зависит от разделителей по командам.
+        all_player_rows = await page.query_selector_all("tr:has(a.pp_link)")
+
+        # Проход 1: все имена со страницы — только DOM, без заходов в профили
+        for row in all_player_rows:
             cells = await row.query_selector_all("td")
             if not cells:
                 continue
-            raw_name = format_name(await cells[0].inner_text())
-            if raw_name:
+            name_link = await cells[0].query_selector("a.pp_link")
+            if not name_link:
+                continue
+            # Берём текст только из ссылки — это гарантированно имя игрока, без мусора
+            raw_name = (await name_link.inner_text()).strip()
+            raw_name = format_name(raw_name)
+            if raw_name and len(raw_name) > 2:
                 current_injury_names_all.append(raw_name)
 
         print(f"  Всего травмированных на странице: {len(current_injury_names_all)}")
 
         # Проход 2: топ-3 — заходим в профили для определения команды, формируем полную строку
         raw_injury_entries = []
-        for row in rows[:3]:
+        for row in all_player_rows[:3]:
             cells = await row.query_selector_all("td")
             if not cells:
                 continue
             name_link = await cells[0].query_selector("a.pp_link")
-            player_url = await name_link.get_attribute("href") if name_link else None
-            name = format_name(await cells[0].inner_text())
-            reason = translate_injury((await cells[3].inner_text()).strip())
+            if not name_link:
+                continue
+            player_url = await name_link.get_attribute("href")
+            name = format_name((await name_link.inner_text()).strip())
+            reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
             raw_injury_entries.append((name, reason, player_url))
 
         for name, reason, player_url in raw_injury_entries:
