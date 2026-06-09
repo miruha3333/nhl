@@ -85,18 +85,6 @@ INJURY_MAPPING = {
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
-NHL_TEAMS = [
-    "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
-    "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NJD",
-    "NSH", "NYI", "NYR", "OTT", "PHI", "PIT", "SEA", "SJS",
-    "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH"
-]
-
-NHL_ABBR_MAP = {
-    "NSH": "NAS",
-    "UTA": "UTAH",
-}
-
 CACHE_FILE = "last_data_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 
@@ -116,41 +104,48 @@ def save_injuries_snapshot(snapshot):
     with open(INJURIES_SNAPSHOT_FILE, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
-def get_nhl_injuries():
-    injured = {}
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    # Проверяем несколько возможных endpoint'ов
-    endpoints = [
-        "https://api-web.nhle.com/v1/injury/picks",
-        "https://api-web.nhle.com/v1/injuries",
-        "https://api-web.nhle.com/v1/injury",
-    ]
-
-    for url in endpoints:
+def commit_file(filepath, message):
+    if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            print(f"\n=== ОТЛАДКА endpoint: {url} ===")
-            print(f"  Статус: {resp.status_code}")
-            if resp.status_code == 200:
-                data = resp.json()
-                print(f"  Тип данных: {type(data)}")
-                if isinstance(data, dict):
-                    print(f"  Ключи верхнего уровня: {list(data.keys())}")
-                    # Печатаем первый элемент любого списка внутри
-                    for k, v in data.items():
-                        if isinstance(v, list) and v:
-                            print(f"  data['{k}'][0] = {json.dumps(v[0], ensure_ascii=False, indent=2)}")
-                            break
-                elif isinstance(data, list) and data:
-                    print(f"  Список, первый элемент: {json.dumps(data[0], ensure_ascii=False, indent=2)}")
-            else:
-                print(f"  Тело ответа: {resp.text[:300]}")
-            print("=== КОНЕЦ ОТЛАДКИ ===\n")
+            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+            subprocess.run(["git", "add", filepath], check=True)
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            if status.stdout.strip():
+                subprocess.run(["git", "commit", "-m", f"{message} [skip ci]"], check=True)
+                subprocess.run(["git", "push"], check=True)
+                print(f"Файл {filepath} сохранён в репозиторий.")
         except Exception as e:
-            print(f"  Ошибка {url}: {e}")
+            print(f"Ошибка сохранения {filepath}: {e}")
 
-    return injured
+def load_cache():
+    default = {
+        "signings": {"last_date": "", "last_id": ""},
+        "trades": {"last_date": "", "last_id": ""},
+        "waivers": {"seen": []}
+    }
+    if not os.path.exists(CACHE_FILE):
+        return default
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return default
+    if isinstance(data.get("signings"), list):
+        data["signings"] = {"last_date": "", "last_id": ""}
+    if isinstance(data.get("trades"), list):
+        data["trades"] = {"last_date": "", "last_id": ""}
+    data.pop("injuries", None)
+    if isinstance(data.get("waivers"), list):
+        data["waivers"] = {"seen": []}
+    elif isinstance(data.get("waivers"), dict):
+        seen = data["waivers"].get("seen", [])
+        if seen and any("(" in s or "⬆️" in s or "⬅️" in s or "➡️" in s for s in seen):
+            data["waivers"] = {"seen": []}
+    for section, default_val in default.items():
+        if section not in data:
+            data[section] = default_val
+    return data
 
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
@@ -287,26 +282,7 @@ async def main():
     raw_signings = []
     raw_trades = []
     current_waivers = []
-
-    # --- ТРАВМЫ ЧЕРЕЗ NHL API — выполняем ПЕРВЫМИ ---
-    print("Получаем травмы через NHL API...")
-    current_injured = get_nhl_injuries()
-    print(f"  Травмированных найдено: {len(current_injured)}")
-
-    prev_snapshot = load_injuries_snapshot()
-    print(f"  В снапшоте было: {len(prev_snapshot)}")
-
-    prev_names = set(prev_snapshot.keys())
-    curr_names = set(current_injured.keys())
-
-    new_injury_names = curr_names - prev_names
-    recovered_names = prev_names - curr_names
-
-    print(f"  Новых травм: {len(new_injury_names)}, выздоровлений: {len(recovered_names)}")
-
-    # Сохраняем снапшот сразу — независимо от остального
-    save_injuries_snapshot(current_injured)
-    commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
+    current_injured = {}
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -315,16 +291,68 @@ async def main():
         )
         page = await context.new_page()
 
+        # --- ТРАВМЫ ЧЕРЕЗ ROTOWIRE ---
+        print("Получаем травмы через Rotowire...")
+        try:
+            await page.goto("https://www.rotowire.com/hockey/injured.php", wait_until="domcontentloaded", timeout=60000)
+            await asyncio.sleep(4)
+            await page.screenshot(path="injury_debug.png")
+
+            rows = await page.query_selector_all(".lineup__player")
+            print(f"  Найдено элементов .lineup__player: {len(rows)}")
+
+            if not rows:
+                # Запасной вариант — пробуем таблицу
+                rows = await page.query_selector_all("table tbody tr")
+                print(f"  Найдено строк в таблице: {len(rows)}")
+                for row in rows:
+                    try:
+                        cells = await row.query_selector_all("td")
+                        if len(cells) >= 3:
+                            name = format_name((await cells[0].inner_text()).strip())
+                            team_raw = (await cells[1].inner_text()).strip()
+                            injury_raw = (await cells[2].inner_text()).strip().lower()
+                            team_abbr = get_team_abbr_by_name(team_raw).strip("()")
+                            reason = INJURY_MAPPING.get(injury_raw, injury_raw if injury_raw else "травма")
+                            if name:
+                                current_injured[name] = {"team": team_abbr, "reason": reason}
+                    except Exception:
+                        continue
+            else:
+                for row in rows:
+                    try:
+                        name_el = await row.query_selector(".lineup__player-name")
+                        team_el = await row.query_selector(".lineup__team")
+                        injury_el = await row.query_selector(".lineup__injury")
+                        if not name_el:
+                            continue
+                        name = (await name_el.inner_text()).strip()
+                        team_raw = (await team_el.inner_text()).strip() if team_el else ""
+                        injury_raw = (await injury_el.inner_text()).strip().lower() if injury_el else ""
+                        team_abbr = get_team_abbr_by_name(team_raw).strip("()")
+                        reason = INJURY_MAPPING.get(injury_raw, injury_raw if injury_raw else "травма")
+                        if name:
+                            current_injured[name] = {"team": team_abbr, "reason": reason}
+                    except Exception:
+                        continue
+
+            print(f"  Травмированных найдено: {len(current_injured)}")
+        except Exception as e:
+            print(f"  Ошибка получения травм: {e}")
+
+        # --- ПОДПИСАНИЯ ---
         print("Открываем страницу подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_signings = await fetch_api(page, SIGNINGS_API, "Подписания")
 
+        # --- ТРЕЙДЫ ---
         print("Открываем страницу трейдов...")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
+        # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
         await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
@@ -352,6 +380,17 @@ async def main():
                     break
 
         await browser.close()
+
+    # --- СНАПШОТ ТРАВМ ---
+    prev_snapshot = load_injuries_snapshot()
+    print(f"  В снапшоте было: {len(prev_snapshot)}")
+    prev_names = set(prev_snapshot.keys())
+    curr_names = set(current_injured.keys())
+    new_injury_names = curr_names - prev_names
+    recovered_names = prev_names - curr_names
+    print(f"  Новых травм: {len(new_injury_names)}, выздоровлений: {len(recovered_names)}")
+    save_injuries_snapshot(current_injured)
+    commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
 
     if not raw_signings:
         print("Подписания не загрузились. Операция прервана.")
