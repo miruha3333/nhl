@@ -92,24 +92,22 @@ SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
 # --- КЭШ ---
-# Формат injuries:
+# Формат:
 # {
-#   "current": ["William Carrier", "Valeri Nichushkin", ...],  <- только имена всех травмированных сейчас
-#   "seen":    ["William Carrier", "Brayden McNabb", ...],     <- имена всех кого когда-либо публиковали
-#   "details": {"William Carrier": "❌ William Carrier (CAR), травма верхней части тела", ...}
-#              <- полная строка для публикации, сохранённая при первом появлении игрока
+#   "signings":  {"last_date": "2026-06-01", "last_id": "abc123"},
+#   "trades":    {"last_date": "2026-06-01", "last_id": "1122"},
+#   "injuries":  {"current": [...полные строки...], "seen": [...только имена игроков...]},
+#   "waivers":   {"current": [...полные строки...], "seen": [...только имена игроков...]}
 # }
-# Логика:
-#   - новый в current и не в seen -> публикуем травму, добавляем в seen и details
-#   - был в previous_current, но пропал из current -> публикуем выздоровление (✅)
-#   - есть в current и в seen -> молчим (уже публиковали)
+# seen для травм и уэйвера хранит ТОЛЬКО имена игроков — сравнение нечувствительно
+# к смене команды, эмодзи и формата строки.
 
 def load_cache():
     """Загружает кэш и автоматически мигрирует любой старый формат в новый."""
     default = {
         "signings": {"last_date": "", "last_id": ""},
         "trades": {"last_date": "", "last_id": ""},
-        "injuries": {"current": [], "seen": [], "details": {}},
+        "injuries": {"current": [], "seen": []},
         "waivers": {"current": [], "seen": []}
     }
 
@@ -132,24 +130,17 @@ def load_cache():
         print("Миграция кэша: trades (список -> словарь)")
         data["trades"] = {"last_date": "", "last_id": ""}
 
-    # Миграция: injuries
+    # Миграция: injuries — если seen содержит полные строки, а не имена,
+    # сбрасываем seen чтобы не было дублей из-за смены формата
     if isinstance(data.get("injuries"), list):
         print("Миграция кэша: injuries (список -> словарь)")
-        data["injuries"] = {"current": [], "seen": [], "details": {}}
+        data["injuries"] = {"current": [], "seen": []}
     elif isinstance(data.get("injuries"), dict):
-        inj = data["injuries"]
-        if "details" not in inj:
-            inj["details"] = {}
-        # Если seen ИЛИ current содержат полные строки (с эмодзи или скобками) — сбрасываем всё
-        seen = inj.get("seen", [])
-        current = inj.get("current", [])
-        has_old_seen = bool(seen and any("(" in s or "❌" in s or "✅" in s for s in seen))
-        has_old_current = bool(current and any("(" in s or "❌" in s or "✅" in s for s in current))
-        if has_old_seen or has_old_current:
-            print("Миграция кэша: injuries (полные строки -> только имена), сброс current и seen")
-            inj["seen"] = []
-            inj["current"] = []
-            inj["details"] = {}
+        seen = data["injuries"].get("seen", [])
+        # Если в seen лежат полные строки с эмодзи или скобками — это старый формат, сбрасываем
+        if seen and any("(" in s or "❌" in s for s in seen):
+            print("Миграция кэша: injuries.seen (полные строки -> только имена), сброс")
+            data["injuries"]["seen"] = []
 
     # Миграция: waivers
     if isinstance(data.get("waivers"), list):
@@ -190,10 +181,11 @@ def commit_cache():
 
 def extract_player_name(line):
     """Извлекает чистое имя игрока из форматированной строки.
-    '❌ Brayden McNabb (VGK), травма лица' -> 'Brayden McNabb'
-    '⬅️ Jack Ahcan (COL) прошел драфт отказов' -> 'Jack Ahcan'
+    Пример: '❌ Brayden McNabb (VGK), травма лица' -> 'Brayden McNabb'
+    Пример: '⬅️ Jack Ahcan (COL) прошел драфт отказов' -> 'Jack Ahcan'
     """
-    clean = line.replace("❌", "").replace("⬆️", "").replace("⬅️", "").replace("➡️", "").replace("📝", "").replace("🔄", "").replace("✅", "")
+    # Убираем все эмодзи и лишние пробелы, берём всё до первой скобки
+    clean = line.replace("❌", "").replace("⬆️", "").replace("⬅️", "").replace("➡️", "").replace("📝", "").replace("🔄", "")
     name = clean.split("(")[0].strip()
     return name
 
@@ -335,11 +327,7 @@ async def get_team_from_profile(page, player_url):
 async def main():
     raw_signings = []
     raw_trades = []
-    # Два уровня для травм:
-    # current_injuries_top  — топ-3 с полными данными (имя + команда + тип) для публикации новых травм
-    # current_injury_names_all — все имена со страницы (без профилей) для отслеживания выздоровления
-    current_injuries_top = []
-    current_injury_names_all = []
+    current_injuries = []
     current_waivers = []
 
     async with async_playwright() as p:
@@ -365,46 +353,23 @@ async def main():
         print("Открываем страницу травм...")
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
-
-        # Собираем ВСЕ строки таблицы — ищем любые tr у которых есть ссылка на профиль игрока.
-        # Это надёжнее чем tbody.divide-y — не зависит от разделителей по командам.
-        all_player_rows = await page.query_selector_all("tr:has(a.pp_link)")
-
-        # Проход 1: все имена со страницы — только DOM, без заходов в профили
-        for row in all_player_rows:
-            cells = await row.query_selector_all("td")
-            if not cells:
-                continue
-            name_link = await cells[0].query_selector("a.pp_link")
-            if not name_link:
-                continue
-            # Берём текст только из ссылки — это гарантированно имя игрока, без мусора
-            raw_name = (await name_link.inner_text()).strip()
-            raw_name = format_name(raw_name)
-            if raw_name and len(raw_name) > 2:
-                current_injury_names_all.append(raw_name)
-
-        print(f"  Всего травмированных на странице: {len(current_injury_names_all)}")
-
-        # Проход 2: топ-3 — заходим в профили для определения команды, формируем полную строку
+        rows = await page.query_selector_all("tbody.divide-y tr")
         raw_injury_entries = []
-        for row in all_player_rows[:3]:
+        for row in rows[:3]:
             cells = await row.query_selector_all("td")
             if not cells:
                 continue
             name_link = await cells[0].query_selector("a.pp_link")
-            if not name_link:
-                continue
-            player_url = await name_link.get_attribute("href")
-            name = format_name((await name_link.inner_text()).strip())
-            reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
+            player_url = await name_link.get_attribute("href") if name_link else None
+            name = format_name(await cells[0].inner_text())
+            reason = translate_injury((await cells[3].inner_text()).strip())
             raw_injury_entries.append((name, reason, player_url))
 
         for name, reason, player_url in raw_injury_entries:
             team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
             line = f"❌ {name} ({team_abbr}), {reason}"
-            current_injuries_top.append((name, line))
-            print(f"  Травма (топ-3): {line}")
+            current_injuries.append(line)
+            print(f"  Травма: {line}")
 
         # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
@@ -532,45 +497,22 @@ async def main():
         cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
         cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
-    # --- ТРАВМЫ ---
-    # seen      — имена всех игроков, о травме которых уже публиковали
-    # current   — имена всех травмированных на странице прямо сейчас (полный список)
-    # details   — словарь {имя: полная строка} для публикации при первом появлении
-    #
-    # Логика:
-    #   НОВАЯ ТРАВМА:  имя есть в current_injury_names_all, но нет в seen -> публикуем из топ-3
-    #   ВЫЗДОРОВЛЕНИЕ: имя было в cache["injuries"]["current"], но пропало из current_injury_names_all -> публикуем ✅
-
-    prev_injury_names = set(cache["injuries"].get("current", []))
+    # --- ТРАВМЫ: сравниваем только по имени игрока ---
+    # seen хранит только имена — нечувствительно к смене команды, эмодзи и формата
     seen_injury_names = set(cache["injuries"].get("seen", []))
-    injury_details = cache["injuries"].get("details", {})
+    new_injuries = []
+    new_injury_names = []
+    for line in current_injuries:
+        player_name = extract_player_name(line)
+        if player_name and player_name not in seen_injury_names:
+            new_injuries.append(line)
+            new_injury_names.append(player_name)
 
-    current_injury_names_set = set(current_injury_names_all)
+    print(f"Новых травм: {len(new_injuries)}")
+    all_new.extend(new_injuries)
 
-    # Новые травмы — только из топ-3 (у них есть команда и тип)
-    for name, line in current_injuries_top:
-        if name not in seen_injury_names:
-            all_new.append(line)
-            seen_injury_names.add(name)
-            injury_details[name] = line
-            print(f"  Новая травма: {line}")
-
-    # Выздоровления — игроки которые были в прошлом current, но пропали из нынешнего
-    recovered = prev_injury_names - current_injury_names_set
-    for name in recovered:
-        recovery_line = f"✅ {name} активирован из списка травмированных"
-        all_new.append(recovery_line)
-        # Убираем из seen — если он снова получит травму, опубликуем повторно
-        seen_injury_names.discard(name)
-        injury_details.pop(name, None)
-        print(f"  Выздоровление: {recovery_line}")
-
-    print(f"Выздоровлений: {len(recovered)}")
-
-    # Обновляем кэш травм
-    cache["injuries"]["current"] = list(current_injury_names_set)
-    cache["injuries"]["seen"] = list(seen_injury_names)
-    cache["injuries"]["details"] = injury_details
+    cache["injuries"]["current"] = current_injuries
+    cache["injuries"]["seen"] = list(seen_injury_names) + new_injury_names
 
     # --- УЭЙВЕР: сравниваем только по имени игрока ---
     seen_waiver_names = set(cache["waivers"].get("seen", []))
