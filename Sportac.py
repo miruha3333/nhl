@@ -120,84 +120,37 @@ def get_nhl_injuries():
     injured = {}
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    try:
-        url = "https://api-web.nhle.com/v1/injury/picks"
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code != 200:
-            print(f"  NHL injury API: статус {resp.status_code}")
-            return injured
+    # Проверяем несколько возможных endpoint'ов
+    endpoints = [
+        "https://api-web.nhle.com/v1/injury/picks",
+        "https://api-web.nhle.com/v1/injuries",
+        "https://api-web.nhle.com/v1/injury",
+    ]
 
-        data = resp.json()
-        injury_list = data.get("data", [])
-        print(f"  NHL injury API: получено записей {len(injury_list)}")
-
-        for entry in injury_list:
-            player = entry.get("player", {})
-            first = player.get("firstName", {})
-            last = player.get("lastName", {})
-            if isinstance(first, dict):
-                first = first.get("default", "")
-            if isinstance(last, dict):
-                last = last.get("default", "")
-            name = f"{first} {last}".strip()
-            if not name:
-                continue
-
-            team_abbr_raw = entry.get("team", {}).get("abbrev", "UNK")
-            our_abbr = NHL_ABBR_MAP.get(team_abbr_raw, team_abbr_raw)
-
-            injury_desc = str(entry.get("injury", "") or entry.get("injuryDescription", "") or "").lower().strip()
-            reason = INJURY_MAPPING.get(injury_desc, injury_desc if injury_desc else "травма")
-
-            injured[name] = {"team": our_abbr, "reason": reason}
-
-    except Exception as e:
-        print(f"  Ошибка получения травм: {e}")
+    for url in endpoints:
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            print(f"\n=== ОТЛАДКА endpoint: {url} ===")
+            print(f"  Статус: {resp.status_code}")
+            if resp.status_code == 200:
+                data = resp.json()
+                print(f"  Тип данных: {type(data)}")
+                if isinstance(data, dict):
+                    print(f"  Ключи верхнего уровня: {list(data.keys())}")
+                    # Печатаем первый элемент любого списка внутри
+                    for k, v in data.items():
+                        if isinstance(v, list) and v:
+                            print(f"  data['{k}'][0] = {json.dumps(v[0], ensure_ascii=False, indent=2)}")
+                            break
+                elif isinstance(data, list) and data:
+                    print(f"  Список, первый элемент: {json.dumps(data[0], ensure_ascii=False, indent=2)}")
+            else:
+                print(f"  Тело ответа: {resp.text[:300]}")
+            print("=== КОНЕЦ ОТЛАДКИ ===\n")
+        except Exception as e:
+            print(f"  Ошибка {url}: {e}")
 
     return injured
-
-def commit_file(filepath, message):
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", filepath], check=True)
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", f"{message} [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-                print(f"Файл {filepath} сохранён в репозиторий.")
-        except Exception as e:
-            print(f"Ошибка сохранения {filepath}: {e}")
-
-def load_cache():
-    default = {
-        "signings": {"last_date": "", "last_id": ""},
-        "trades": {"last_date": "", "last_id": ""},
-        "waivers": {"seen": []}
-    }
-    if not os.path.exists(CACHE_FILE):
-        return default
-    try:
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return default
-    if isinstance(data.get("signings"), list):
-        data["signings"] = {"last_date": "", "last_id": ""}
-    if isinstance(data.get("trades"), list):
-        data["trades"] = {"last_date": "", "last_id": ""}
-    data.pop("injuries", None)
-    if isinstance(data.get("waivers"), list):
-        data["waivers"] = {"seen": []}
-    elif isinstance(data.get("waivers"), dict):
-        seen = data["waivers"].get("seen", [])
-        if seen and any("(" in s or "⬆️" in s or "⬅️" in s or "➡️" in s for s in seen):
-            data["waivers"] = {"seen": []}
-    for section, default_val in default.items():
-        if section not in data:
-            data[section] = default_val
-    return data
 
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
