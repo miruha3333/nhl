@@ -117,78 +117,42 @@ def save_injuries_snapshot(snapshot):
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
 def get_nhl_injuries():
-    """
-    Получает список травмированных через NHL API.
-    Добавлена полная отладка структуры ответа для первой команды.
-    """
     injured = {}
     headers = {"User-Agent": "Mozilla/5.0"}
-    debug_done = False
 
-    for team_abbr in NHL_TEAMS:
-        try:
-            url = f"https://api-web.nhle.com/v1/roster/{team_abbr}/current"
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code != 200:
-                print(f"  {team_abbr}: статус {resp.status_code}, пропускаем")
+    try:
+        url = "https://api-web.nhle.com/v1/injury/picks"
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            print(f"  NHL injury API: статус {resp.status_code}")
+            return injured
+
+        data = resp.json()
+        injury_list = data.get("data", [])
+        print(f"  NHL injury API: получено записей {len(injury_list)}")
+
+        for entry in injury_list:
+            player = entry.get("player", {})
+            first = player.get("firstName", {})
+            last = player.get("lastName", {})
+            if isinstance(first, dict):
+                first = first.get("default", "")
+            if isinstance(last, dict):
+                last = last.get("default", "")
+            name = f"{first} {last}".strip()
+            if not name:
                 continue
-            data = resp.json()
-            our_abbr = NHL_ABBR_MAP.get(team_abbr, team_abbr)
 
-            # Отладка: для первой команды печатаем ключи одного игрока
-            if not debug_done:
-                for section in ("forwards", "defensemen", "goalies"):
-                    players = data.get(section, [])
-                    if players:
-                        sample = players[0]
-                        print(f"\n=== ОТЛАДКА: {team_abbr} / {section} — ключи первого игрока ===")
-                        print(json.dumps(sample, ensure_ascii=False, indent=2))
-                        print("=== КОНЕЦ ОТЛАДКИ ===\n")
-                        debug_done = True
-                        break
+            team_abbr_raw = entry.get("team", {}).get("abbrev", "UNK")
+            our_abbr = NHL_ABBR_MAP.get(team_abbr_raw, team_abbr_raw)
 
-            for section in ("forwards", "defensemen", "goalies"):
-                for player in data.get(section, []):
-                    # Пробуем все возможные варианты названий полей
-                    injury_status = (
-                        player.get("injuryStatus") or
-                        player.get("injury_status") or
-                        player.get("status") or
-                        ""
-                    )
-                    injury_desc = (
-                        player.get("injuryDescription") or
-                        player.get("injury_description") or
-                        player.get("injuryType") or
-                        player.get("injury") or
-                        ""
-                    )
+            injury_desc = str(entry.get("injury", "") or entry.get("injuryDescription", "") or "").lower().strip()
+            reason = INJURY_MAPPING.get(injury_desc, injury_desc if injury_desc else "травма")
 
-                    if not injury_status and not injury_desc:
-                        continue
+            injured[name] = {"team": our_abbr, "reason": reason}
 
-                    status_upper = str(injury_status).upper()
-                    if status_upper not in ("IR", "IR-NR", "LTIR", "DAY-TO-DAY", "OUT", "10-DAY-IR", "60-DAY-IR"):
-                        continue
-
-                    first = player.get("firstName", {})
-                    last = player.get("lastName", {})
-                    # firstName может быть строкой или словарём {"default": "..."}
-                    if isinstance(first, dict):
-                        first = first.get("default", "")
-                    if isinstance(last, dict):
-                        last = last.get("default", "")
-                    name = f"{first} {last}".strip()
-                    if not name:
-                        continue
-
-                    reason_raw = str(injury_desc).lower().strip() if injury_desc else str(injury_status).lower()
-                    reason = INJURY_MAPPING.get(reason_raw, str(injury_desc) if injury_desc else str(injury_status))
-                    injured[name] = {"team": our_abbr, "reason": reason}
-
-        except Exception as e:
-            print(f"  Ошибка получения травм {team_abbr}: {e}")
-            continue
+    except Exception as e:
+        print(f"  Ошибка получения травм: {e}")
 
     return injured
 
