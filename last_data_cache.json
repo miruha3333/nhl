@@ -7,24 +7,6 @@
     "last_date": "2026-06-01",
     "last_id": "1123"
   },
-  "injuries": {
-    "current": [
-      "❌ William Carrier (CAR), травма верхней части тела",
-      "❌ Valeri Nichushkin (COL), травма нижней части тела",
-      "❌ Max Domi (TOR), Back"
-    ],
-    "seen": [
-      "William Carrier",
-      "Max Domi",
-      "Valeri Nichushkin",
-      "Brayden McNabb"
-    ],
-    "details": {
-      "William Carrier": "❌ William Carrier (CAR), травма верхней части тела",
-      "Valeri Nichushkin": "❌ Valeri Nichushkin (COL), травма нижней части тела",
-      "Max Domi": "❌ Max Domi (TOR), Back"
-    }
-  },
   "waivers": {
     "current": [
       "⬅️ Jack Ahcan (COL) прошел драфт отказов",
@@ -32,9 +14,9 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Michael Pezzetta",
       "Lukas Reichel",
-      "Jack Ahcan"
+      "Jack Ahcan",
+      "Michael Pezzetta"
     ]
   }
 }
