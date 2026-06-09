@@ -80,35 +80,135 @@ INJURY_MAPPING = {
     "abdomen": "травма брюшной полости", "collarbone": "травма ключицы", "hamstring": "травма задней поверхности бедра",
     "ribs": "травма ребра", "shoulder": "травма плеча", "face": "травма лица", "concussion": "сотрясение мозга",
     "hand": "травма руки", "groin": "травма паха", "personal": "личная причина", "finger": "травма пальца",
-    "thumb": "травма большого пальца", "lower leg": "травма голени", "achilles": "травма ахилла"
+    "thumb": "травма большого пальца", "lower leg": "травма голени", "achilles": "травма ахилла",
+    "back": "травма спины", "knee": "травма колена", "neck": "травма шеи", "wrist": "травма запястья",
+    "illness": "болезнь", "elbow": "травма локтя", "chest": "травма грудной клетки"
 }
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
+# Все 32 команды НХЛ — аббревиатуры для NHL API
+NHL_TEAMS = [
+    "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
+    "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NJD",
+    "NSH", "NYI", "NYR", "OTT", "PHI", "PIT", "SEA", "SJS",
+    "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH"
+]
+
+# Маппинг аббревиатур NHL API -> наш формат
+NHL_ABBR_MAP = {
+    "NSH": "NAS",  # Nashville в NHL API = NSH, у нас NAS
+    "UTA": "UTAH", # Utah в NHL API = UTA, у нас UTAH
+}
+
 NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.json"
+INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
-# --- КЭШ ---
-# Формат:
-# {
-#   "signings":  {"last_date": "2026-06-01", "last_id": "abc123"},
-#   "trades":    {"last_date": "2026-06-01", "last_id": "1122"},
-#   "injuries":  {"current": [...полные строки...], "seen": [...только имена игроков...]},
-#   "waivers":   {"current": [...полные строки...], "seen": [...только имена игроков...]}
-# }
-# seen для травм и уэйвера хранит ТОЛЬКО имена игроков — сравнение нечувствительно
-# к смене команды, эмодзи и формата строки.
+# =============================================================================
+# БЛОК ТРАВМ ЧЕРЕЗ NHL API
+# Логика:
+#   - injuries_snapshot.json хранит снапшот: {имя: {team, reason}} всех травмированных
+#   - при каждом запуске получаем свежий список через NHL API (32 запроса, ~3-4 сек)
+#   - новые имена (есть сейчас, нет в снапшоте) -> публикуем ❌
+#   - пропавшие имена (были в снапшоте, нет сейчас) -> публикуем ✅
+#   - снапшот обновляется в отдельном файле, независимо от основного кэша
+# =============================================================================
+
+def load_injuries_snapshot():
+    """Загружает снапшот травм из отдельного файла."""
+    if not os.path.exists(INJURIES_SNAPSHOT_FILE):
+        return {}
+    try:
+        with open(INJURIES_SNAPSHOT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_injuries_snapshot(snapshot):
+    """Сохраняет снапшот травм в отдельный файл."""
+    with open(INJURIES_SNAPSHOT_FILE, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+
+def get_nhl_injuries():
+    """
+    Получает список всех травмированных игроков через NHL API.
+    Проходит по всем 32 командам, возвращает словарь:
+    { "Имя Фамилия": {"team": "VGK", "reason": "травма лица"} }
+    """
+    injured = {}
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    for team_abbr in NHL_TEAMS:
+        try:
+            url = f"https://api-web.nhle.com/v1/roster/{team_abbr}/current"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+
+            # Наш аббревиатур для публикации
+            our_abbr = NHL_ABBR_MAP.get(team_abbr, team_abbr)
+
+            # NHL API возвращает три секции: forwards, defensemen, goalies
+            for section in ("forwards", "defensemen", "goalies"):
+                for player in data.get(section, []):
+                    # Травмированные имеют поле injuryStatus или injuryDescription
+                    injury_status = player.get("injuryStatus", "")
+                    injury_desc = player.get("injuryDescription", "")
+
+                    if not injury_status and not injury_desc:
+                        continue
+
+                    # Статусы которые означают травму/недоступность
+                    if injury_status.upper() not in ("IR", "IR-NR", "LTIR", "DAY-TO-DAY", "OUT", "10-DAY-IR", "60-DAY-IR"):
+                        continue
+
+                    first = player.get("firstName", {}).get("default", "")
+                    last = player.get("lastName", {}).get("default", "")
+                    name = f"{first} {last}".strip()
+                    if not name:
+                        continue
+
+                    # Переводим причину если возможно
+                    reason_raw = injury_desc.lower().strip() if injury_desc else injury_status.lower()
+                    reason = INJURY_MAPPING.get(reason_raw, injury_desc if injury_desc else injury_status)
+
+                    injured[name] = {"team": our_abbr, "reason": reason}
+
+        except Exception as e:
+            print(f"  Ошибка получения травм {team_abbr}: {e}")
+            continue
+
+    return injured
+
+def commit_file(filepath, message):
+    """Коммитит указанный файл в репозиторий."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+            subprocess.run(["git", "add", filepath], check=True)
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            if status.stdout.strip():
+                subprocess.run(["git", "commit", "-m", f"{message} [skip ci]"], check=True)
+                subprocess.run(["git", "push"], check=True)
+                print(f"Файл {filepath} сохранён в репозиторий.")
+        except Exception as e:
+            print(f"Ошибка сохранения {filepath}: {e}")
+
+# =============================================================================
+# КЭШ (только для подписаний, трейдов, уэйвера)
+# =============================================================================
 
 def load_cache():
-    """Загружает кэш и автоматически мигрирует любой старый формат в новый."""
     default = {
         "signings": {"last_date": "", "last_id": ""},
         "trades": {"last_date": "", "last_id": ""},
-        "injuries": {"current": [], "seen": []},
-        "waivers": {"current": [], "seen": []}
+        "waivers": {"seen": []}
     }
 
     if not os.path.exists(CACHE_FILE):
@@ -122,37 +222,23 @@ def load_cache():
 
     # Миграция: signings
     if isinstance(data.get("signings"), list):
-        print("Миграция кэша: signings (список -> словарь)")
         data["signings"] = {"last_date": "", "last_id": ""}
 
     # Миграция: trades
     if isinstance(data.get("trades"), list):
-        print("Миграция кэша: trades (список -> словарь)")
         data["trades"] = {"last_date": "", "last_id": ""}
 
-    # Миграция: injuries — если seen содержит полные строки, а не имена,
-    # сбрасываем seen чтобы не было дублей из-за смены формата
-    if isinstance(data.get("injuries"), list):
-        print("Миграция кэша: injuries (список -> словарь)")
-        data["injuries"] = {"current": [], "seen": []}
-    elif isinstance(data.get("injuries"), dict):
-        seen = data["injuries"].get("seen", [])
-        # Если в seen лежат полные строки с эмодзи или скобками — это старый формат, сбрасываем
-        if seen and any("(" in s or "❌" in s for s in seen):
-            print("Миграция кэша: injuries.seen (полные строки -> только имена), сброс")
-            data["injuries"]["seen"] = []
+    # Удаляем injuries из кэша если остались — теперь они в отдельном файле
+    data.pop("injuries", None)
 
     # Миграция: waivers
     if isinstance(data.get("waivers"), list):
-        print("Миграция кэша: waivers (список -> словарь)")
-        data["waivers"] = {"current": [], "seen": []}
+        data["waivers"] = {"seen": []}
     elif isinstance(data.get("waivers"), dict):
         seen = data["waivers"].get("seen", [])
         if seen and any("(" in s or "⬆️" in s or "⬅️" in s or "➡️" in s for s in seen):
-            print("Миграция кэша: waivers.seen (полные строки -> только имена), сброс")
-            data["waivers"]["seen"] = []
+            data["waivers"] = {"seen": []}
 
-    # Заполняем отсутствующие ключи
     for section, default_val in default.items():
         if section not in data:
             data[section] = default_val
@@ -163,31 +249,15 @@ def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
-def commit_cache():
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", CACHE_FILE], check=True)
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-                print("Кэш сохранён в репозиторий.")
-        except Exception as e:
-            print(f"Ошибка сохранения кэша: {e}")
-
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+# =============================================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# =============================================================================
 
 def extract_player_name(line):
-    """Извлекает чистое имя игрока из форматированной строки.
-    Пример: '❌ Brayden McNabb (VGK), травма лица' -> 'Brayden McNabb'
-    Пример: '⬅️ Jack Ahcan (COL) прошел драфт отказов' -> 'Jack Ahcan'
-    """
-    # Убираем все эмодзи и лишние пробелы, берём всё до первой скобки
-    clean = line.replace("❌", "").replace("⬆️", "").replace("⬅️", "").replace("➡️", "").replace("📝", "").replace("🔄", "")
-    name = clean.split("(")[0].strip()
-    return name
+    clean = line
+    for emoji in ["❌", "⬆️", "⬅️", "➡️", "📝", "🔄", "✅"]:
+        clean = clean.replace(emoji, "")
+    return clean.split("(")[0].strip()
 
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
@@ -256,9 +326,6 @@ def translate_trade(text):
         return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
     return text
 
-def translate_injury(raw):
-    return INJURY_MAPPING.get(raw.lower().strip(), raw)
-
 def format_name(n):
     n = n.replace('\n', ' ').strip()
     if "," in n:
@@ -313,21 +380,13 @@ async def fetch_api(page, url, label):
             await asyncio.sleep(5)
     return []
 
-async def get_team_from_profile(page, player_url):
-    await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
-    await asyncio.sleep(1.5)
-    all_team_links = await page.eval_on_selector_all(
-        "a[href*='/team/']",
-        "els => els.map(e => e.getAttribute('href'))"
-    )
-    if len(all_team_links) > NAV_LINKS_COUNT:
-        return get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
-    return "UNK"
+# =============================================================================
+# ГЛАВНАЯ ФУНКЦИЯ
+# =============================================================================
 
 async def main():
     raw_signings = []
     raw_trades = []
-    current_injuries = []
     current_waivers = []
 
     async with async_playwright() as p:
@@ -348,28 +407,6 @@ async def main():
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
-
-        # --- ТРАВМЫ ---
-        print("Открываем страницу травм...")
-        await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(2)
-        rows = await page.query_selector_all("tbody.divide-y tr")
-        raw_injury_entries = []
-        for row in rows[:3]:
-            cells = await row.query_selector_all("td")
-            if not cells:
-                continue
-            name_link = await cells[0].query_selector("a.pp_link")
-            player_url = await name_link.get_attribute("href") if name_link else None
-            name = format_name(await cells[0].inner_text())
-            reason = translate_injury((await cells[3].inner_text()).strip())
-            raw_injury_entries.append((name, reason, player_url))
-
-        for name, reason, player_url in raw_injury_entries:
-            team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
-            line = f"❌ {name} ({team_abbr}), {reason}"
-            current_injuries.append(line)
-            print(f"  Травма: {line}")
 
         # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
@@ -408,11 +445,30 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    # --- ЗАГРУЖАЕМ КЭШ (с автомиграцией) ---
+    # --- ТРАВМЫ ЧЕРЕЗ NHL API ---
+    print("Получаем травмы через NHL API...")
+    current_injured = get_nhl_injuries()
+    print(f"  Травмированных найдено: {len(current_injured)}")
+
+    # Загружаем предыдущий снапшот из отдельного файла
+    prev_snapshot = load_injuries_snapshot()
+    print(f"  В снапшоте было: {len(prev_snapshot)}")
+
+    prev_names = set(prev_snapshot.keys())
+    curr_names = set(current_injured.keys())
+
+    # Новые травмы — есть сейчас, не было раньше
+    new_injury_names = curr_names - prev_names
+    # Выздоровели — были раньше, нет сейчас
+    recovered_names = prev_names - curr_names
+
+    print(f"  Новых травм: {len(new_injury_names)}, выздоровлений: {len(recovered_names)}")
+
+    # --- ЗАГРУЖАЕМ ОСНОВНОЙ КЭШ ---
     cache = load_cache()
     all_new = []
 
-    # --- ПОДПИСАНИЯ: по дате и ID из API ---
+    # --- ПОДПИСАНИЯ ---
     last_sign_date = cache["signings"].get("last_date", "")
     last_sign_id = cache["signings"].get("last_id", "")
 
@@ -435,30 +491,25 @@ async def main():
         name = f"{p_fn} {p_ln}".strip()
         if not name:
             continue
-
         lvl = str(item.get('lvl', '')).upper()
         cap_hit = item.get('cap_hit', 0) or 0
         try:
             cap_val = float(str(cap_hit).replace(',', '')) / 10
         except:
             cap_val = 0
-
         years_raw = str(item.get('len', 1) or 1)
         try:
             years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
         except:
             years = 1
-
         sign_city = str(item.get('sign_city', '')).strip()
         sign_team_name = str(item.get('sign_team_name', '')).strip()
         team_name = f"{sign_city} {sign_team_name}".strip()
-
         raw_type = str(item.get('type_name', '')).lower()
         if "extension" in raw_type:
             ctype = "продлил контракт"
         else:
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-
         line = f"📝 {name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
         all_new.append(line)
 
@@ -466,7 +517,7 @@ async def main():
         cache["signings"]["last_date"] = str(raw_signings[0].get("sign_date", "") or "")
         cache["signings"]["last_id"] = str(raw_signings[0].get("cid", "") or raw_signings[0].get("id", "") or "")
 
-    # --- ТРЕЙДЫ: по дате и ID из API ---
+    # --- ТРЕЙДЫ ---
     last_trade_date = cache["trades"].get("last_date", "")
     last_trade_id = cache["trades"].get("last_id", "")
 
@@ -497,24 +548,22 @@ async def main():
         cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
         cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
-    # --- ТРАВМЫ: сравниваем только по имени игрока ---
-    # seen хранит только имена — нечувствительно к смене команды, эмодзи и формата
-    seen_injury_names = set(cache["injuries"].get("seen", []))
-    new_injuries = []
-    new_injury_names = []
-    for line in current_injuries:
-        player_name = extract_player_name(line)
-        if player_name and player_name not in seen_injury_names:
-            new_injuries.append(line)
-            new_injury_names.append(player_name)
+    # --- НОВЫЕ ТРАВМЫ ---
+    for name in sorted(new_injury_names):
+        info = current_injured[name]
+        reason = info.get("reason", "")
+        team = info.get("team", "UNK")
+        line = f"❌ {name} ({team}), {reason}"
+        all_new.append(line)
+        print(f"  Новая травма: {line}")
 
-    print(f"Новых травм: {len(new_injuries)}")
-    all_new.extend(new_injuries)
+    # --- ВЫЗДОРОВЛЕНИЯ ---
+    for name in sorted(recovered_names):
+        line = f"✅ {name} активирован из списка травмированных"
+        all_new.append(line)
+        print(f"  Выздоровление: {line}")
 
-    cache["injuries"]["current"] = current_injuries
-    cache["injuries"]["seen"] = list(seen_injury_names) + new_injury_names
-
-    # --- УЭЙВЕР: сравниваем только по имени игрока ---
+    # --- УЭЙВЕР ---
     seen_waiver_names = set(cache["waivers"].get("seen", []))
     new_waivers = []
     new_waiver_names = []
@@ -526,19 +575,20 @@ async def main():
 
     print(f"Новых уэйверов: {len(new_waivers)}")
     all_new.extend(new_waivers)
-
-    cache["waivers"]["current"] = current_waivers
     cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
 
-    # --- СОХРАНЯЕМ КЭШ В ЛЮБОМ СЛУЧАЕ ---
+    # --- СОХРАНЯЕМ СНАПШОТ ТРАВМ (всегда, независимо от наличия новостей) ---
+    save_injuries_snapshot(current_injured)
+    commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
+
+    # --- СОХРАНЯЕМ ОСНОВНОЙ КЭШ ---
     save_cache(cache)
-    commit_cache()
+    commit_file(CACHE_FILE, "Обновление кэша")
 
     if not all_new:
         print("Новых событий нет. Скрипт завершен без отправки.")
         return
 
-    # --- ОТПРАВКА ТОЛЬКО НОВЫХ ЗАПИСЕЙ ---
     message = "\n\n".join(all_new)
     send_to_telegram(message)
     print(f"Отправлено {len(all_new)} новых записей в Telegram.")
