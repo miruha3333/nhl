@@ -7,8 +7,6 @@ import json
 from datetime import datetime
 from playwright.async_api import async_playwright
 
-# --- НАСТРОЙКИ ---
-
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
     'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN', 'islanders': 'NYI',
@@ -87,7 +85,6 @@ INJURY_MAPPING = {
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
-# Все 32 команды НХЛ — аббревиатуры для NHL API
 NHL_TEAMS = [
     "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
     "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NJD",
@@ -95,10 +92,9 @@ NHL_TEAMS = [
     "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH"
 ]
 
-# Маппинг аббревиатур NHL API -> наш формат
 NHL_ABBR_MAP = {
-    "NSH": "NAS",  # Nashville в NHL API = NSH, у нас NAS
-    "UTA": "UTAH", # Utah в NHL API = UTA, у нас UTAH
+    "NSH": "NAS",
+    "UTA": "UTAH",
 }
 
 NAV_LINKS_COUNT = 64
@@ -108,18 +104,7 @@ INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
-# =============================================================================
-# БЛОК ТРАВМ ЧЕРЕЗ NHL API
-# Логика:
-#   - injuries_snapshot.json хранит снапшот: {имя: {team, reason}} всех травмированных
-#   - при каждом запуске получаем свежий список через NHL API (32 запроса, ~3-4 сек)
-#   - новые имена (есть сейчас, нет в снапшоте) -> публикуем ❌
-#   - пропавшие имена (были в снапшоте, нет сейчас) -> публикуем ✅
-#   - снапшот обновляется в отдельном файле, независимо от основного кэша
-# =============================================================================
-
 def load_injuries_snapshot():
-    """Загружает снапшот травм из отдельного файла."""
     if not os.path.exists(INJURIES_SNAPSHOT_FILE):
         return {}
     try:
@@ -129,19 +114,12 @@ def load_injuries_snapshot():
         return {}
 
 def save_injuries_snapshot(snapshot):
-    """Сохраняет снапшот травм в отдельный файл."""
     with open(INJURIES_SNAPSHOT_FILE, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
 def get_nhl_injuries():
-    """
-    Получает список всех травмированных игроков через NHL API.
-    Проходит по всем 32 командам, возвращает словарь:
-    { "Имя Фамилия": {"team": "VGK", "reason": "травма лица"} }
-    """
     injured = {}
     headers = {"User-Agent": "Mozilla/5.0"}
-
     for team_abbr in NHL_TEAMS:
         try:
             url = f"https://api-web.nhle.com/v1/roster/{team_abbr}/current"
@@ -149,44 +127,29 @@ def get_nhl_injuries():
             if resp.status_code != 200:
                 continue
             data = resp.json()
-
-            # Наш аббревиатур для публикации
             our_abbr = NHL_ABBR_MAP.get(team_abbr, team_abbr)
-
-            # NHL API возвращает три секции: forwards, defensemen, goalies
             for section in ("forwards", "defensemen", "goalies"):
                 for player in data.get(section, []):
-                    # Травмированные имеют поле injuryStatus или injuryDescription
                     injury_status = player.get("injuryStatus", "")
                     injury_desc = player.get("injuryDescription", "")
-
                     if not injury_status and not injury_desc:
                         continue
-
-                    # Статусы которые означают травму/недоступность
                     if injury_status.upper() not in ("IR", "IR-NR", "LTIR", "DAY-TO-DAY", "OUT", "10-DAY-IR", "60-DAY-IR"):
                         continue
-
                     first = player.get("firstName", {}).get("default", "")
                     last = player.get("lastName", {}).get("default", "")
                     name = f"{first} {last}".strip()
                     if not name:
                         continue
-
-                    # Переводим причину если возможно
                     reason_raw = injury_desc.lower().strip() if injury_desc else injury_status.lower()
                     reason = INJURY_MAPPING.get(reason_raw, injury_desc if injury_desc else injury_status)
-
                     injured[name] = {"team": our_abbr, "reason": reason}
-
         except Exception as e:
             print(f"  Ошибка получения травм {team_abbr}: {e}")
             continue
-
     return injured
 
 def commit_file(filepath, message):
-    """Коммитит указанный файл в репозиторий."""
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
@@ -200,58 +163,38 @@ def commit_file(filepath, message):
         except Exception as e:
             print(f"Ошибка сохранения {filepath}: {e}")
 
-# =============================================================================
-# КЭШ (только для подписаний, трейдов, уэйвера)
-# =============================================================================
-
 def load_cache():
     default = {
         "signings": {"last_date": "", "last_id": ""},
         "trades": {"last_date": "", "last_id": ""},
         "waivers": {"seen": []}
     }
-
     if not os.path.exists(CACHE_FILE):
         return default
-
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
         return default
-
-    # Миграция: signings
     if isinstance(data.get("signings"), list):
         data["signings"] = {"last_date": "", "last_id": ""}
-
-    # Миграция: trades
     if isinstance(data.get("trades"), list):
         data["trades"] = {"last_date": "", "last_id": ""}
-
-    # Удаляем injuries из кэша если остались — теперь они в отдельном файле
     data.pop("injuries", None)
-
-    # Миграция: waivers
     if isinstance(data.get("waivers"), list):
         data["waivers"] = {"seen": []}
     elif isinstance(data.get("waivers"), dict):
         seen = data["waivers"].get("seen", [])
         if seen and any("(" in s or "⬆️" in s or "⬅️" in s or "➡️" in s for s in seen):
             data["waivers"] = {"seen": []}
-
     for section, default_val in default.items():
         if section not in data:
             data[section] = default_val
-
     return data
 
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
-
-# =============================================================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-# =============================================================================
 
 def extract_player_name(line):
     clean = line
@@ -380,14 +323,30 @@ async def fetch_api(page, url, label):
             await asyncio.sleep(5)
     return []
 
-# =============================================================================
-# ГЛАВНАЯ ФУНКЦИЯ
-# =============================================================================
-
 async def main():
     raw_signings = []
     raw_trades = []
     current_waivers = []
+
+    # --- ТРАВМЫ ЧЕРЕЗ NHL API — выполняем ПЕРВЫМИ, до любых проверок ---
+    print("Получаем травмы через NHL API...")
+    current_injured = get_nhl_injuries()
+    print(f"  Травмированных найдено: {len(current_injured)}")
+
+    prev_snapshot = load_injuries_snapshot()
+    print(f"  В снапшоте было: {len(prev_snapshot)}")
+
+    prev_names = set(prev_snapshot.keys())
+    curr_names = set(current_injured.keys())
+
+    new_injury_names = curr_names - prev_names
+    recovered_names = prev_names - curr_names
+
+    print(f"  Новых травм: {len(new_injury_names)}, выздоровлений: {len(recovered_names)}")
+
+    # Сохраняем снапшот сразу — независимо от того, загрузятся ли подписания/трейды
+    save_injuries_snapshot(current_injured)
+    commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -396,19 +355,16 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- ПОДПИСАНИЯ ---
         print("Открываем страницу подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_signings = await fetch_api(page, SIGNINGS_API, "Подписания")
 
-        # --- ТРЕЙДЫ ---
         print("Открываем страницу трейдов...")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
-        # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
         await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
@@ -437,7 +393,6 @@ async def main():
 
         await browser.close()
 
-    # --- ПРОВЕРКА ЗАГРУЗКИ ---
     if not raw_signings:
         print("Подписания не загрузились. Операция прервана.")
         return
@@ -445,33 +400,12 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    # --- ТРАВМЫ ЧЕРЕЗ NHL API ---
-    print("Получаем травмы через NHL API...")
-    current_injured = get_nhl_injuries()
-    print(f"  Травмированных найдено: {len(current_injured)}")
-
-    # Загружаем предыдущий снапшот из отдельного файла
-    prev_snapshot = load_injuries_snapshot()
-    print(f"  В снапшоте было: {len(prev_snapshot)}")
-
-    prev_names = set(prev_snapshot.keys())
-    curr_names = set(current_injured.keys())
-
-    # Новые травмы — есть сейчас, не было раньше
-    new_injury_names = curr_names - prev_names
-    # Выздоровели — были раньше, нет сейчас
-    recovered_names = prev_names - curr_names
-
-    print(f"  Новых травм: {len(new_injury_names)}, выздоровлений: {len(recovered_names)}")
-
-    # --- ЗАГРУЖАЕМ ОСНОВНОЙ КЭШ ---
     cache = load_cache()
     all_new = []
 
     # --- ПОДПИСАНИЯ ---
     last_sign_date = cache["signings"].get("last_date", "")
     last_sign_id = cache["signings"].get("last_id", "")
-
     new_signings_raw = []
     for item in raw_signings:
         item_date = str(item.get("sign_date", "") or "")
@@ -520,7 +454,6 @@ async def main():
     # --- ТРЕЙДЫ ---
     last_trade_date = cache["trades"].get("last_date", "")
     last_trade_id = cache["trades"].get("last_id", "")
-
     new_trades_raw = []
     for item in raw_trades:
         item_date = str(item.get("trade_date", "") or "")
@@ -576,10 +509,6 @@ async def main():
     print(f"Новых уэйверов: {len(new_waivers)}")
     all_new.extend(new_waivers)
     cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
-
-    # --- СОХРАНЯЕМ СНАПШОТ ТРАВМ (всегда, независимо от наличия новостей) ---
-    save_injuries_snapshot(current_injured)
-    commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
 
     # --- СОХРАНЯЕМ ОСНОВНОЙ КЭШ ---
     save_cache(cache)
