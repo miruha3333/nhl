@@ -97,7 +97,6 @@ NHL_ABBR_MAP = {
     "UTA": "UTAH",
 }
 
-NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 
@@ -118,35 +117,79 @@ def save_injuries_snapshot(snapshot):
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
 def get_nhl_injuries():
+    """
+    Получает список травмированных через NHL API.
+    Добавлена полная отладка структуры ответа для первой команды.
+    """
     injured = {}
     headers = {"User-Agent": "Mozilla/5.0"}
+    debug_done = False
+
     for team_abbr in NHL_TEAMS:
         try:
             url = f"https://api-web.nhle.com/v1/roster/{team_abbr}/current"
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code != 200:
+                print(f"  {team_abbr}: статус {resp.status_code}, пропускаем")
                 continue
             data = resp.json()
             our_abbr = NHL_ABBR_MAP.get(team_abbr, team_abbr)
+
+            # Отладка: для первой команды печатаем ключи одного игрока
+            if not debug_done:
+                for section in ("forwards", "defensemen", "goalies"):
+                    players = data.get(section, [])
+                    if players:
+                        sample = players[0]
+                        print(f"\n=== ОТЛАДКА: {team_abbr} / {section} — ключи первого игрока ===")
+                        print(json.dumps(sample, ensure_ascii=False, indent=2))
+                        print("=== КОНЕЦ ОТЛАДКИ ===\n")
+                        debug_done = True
+                        break
+
             for section in ("forwards", "defensemen", "goalies"):
                 for player in data.get(section, []):
-                    injury_status = player.get("injuryStatus", "")
-                    injury_desc = player.get("injuryDescription", "")
+                    # Пробуем все возможные варианты названий полей
+                    injury_status = (
+                        player.get("injuryStatus") or
+                        player.get("injury_status") or
+                        player.get("status") or
+                        ""
+                    )
+                    injury_desc = (
+                        player.get("injuryDescription") or
+                        player.get("injury_description") or
+                        player.get("injuryType") or
+                        player.get("injury") or
+                        ""
+                    )
+
                     if not injury_status and not injury_desc:
                         continue
-                    if injury_status.upper() not in ("IR", "IR-NR", "LTIR", "DAY-TO-DAY", "OUT", "10-DAY-IR", "60-DAY-IR"):
+
+                    status_upper = str(injury_status).upper()
+                    if status_upper not in ("IR", "IR-NR", "LTIR", "DAY-TO-DAY", "OUT", "10-DAY-IR", "60-DAY-IR"):
                         continue
-                    first = player.get("firstName", {}).get("default", "")
-                    last = player.get("lastName", {}).get("default", "")
+
+                    first = player.get("firstName", {})
+                    last = player.get("lastName", {})
+                    # firstName может быть строкой или словарём {"default": "..."}
+                    if isinstance(first, dict):
+                        first = first.get("default", "")
+                    if isinstance(last, dict):
+                        last = last.get("default", "")
                     name = f"{first} {last}".strip()
                     if not name:
                         continue
-                    reason_raw = injury_desc.lower().strip() if injury_desc else injury_status.lower()
-                    reason = INJURY_MAPPING.get(reason_raw, injury_desc if injury_desc else injury_status)
+
+                    reason_raw = str(injury_desc).lower().strip() if injury_desc else str(injury_status).lower()
+                    reason = INJURY_MAPPING.get(reason_raw, str(injury_desc) if injury_desc else str(injury_status))
                     injured[name] = {"team": our_abbr, "reason": reason}
+
         except Exception as e:
             print(f"  Ошибка получения травм {team_abbr}: {e}")
             continue
+
     return injured
 
 def commit_file(filepath, message):
@@ -328,7 +371,7 @@ async def main():
     raw_trades = []
     current_waivers = []
 
-    # --- ТРАВМЫ ЧЕРЕЗ NHL API — выполняем ПЕРВЫМИ, до любых проверок ---
+    # --- ТРАВМЫ ЧЕРЕЗ NHL API — выполняем ПЕРВЫМИ ---
     print("Получаем травмы через NHL API...")
     current_injured = get_nhl_injuries()
     print(f"  Травмированных найдено: {len(current_injured)}")
@@ -344,7 +387,7 @@ async def main():
 
     print(f"  Новых травм: {len(new_injury_names)}, выздоровлений: {len(recovered_names)}")
 
-    # Сохраняем снапшот сразу — независимо от того, загрузятся ли подписания/трейды
+    # Сохраняем снапшот сразу — независимо от остального
     save_injuries_snapshot(current_injured)
     commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
 
