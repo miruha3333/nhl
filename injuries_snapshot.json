@@ -1,37 +1,13 @@
 {
-  "Montreal Canadiens": {
+  "Pontus Holmberg": {
     "team": "UNK",
     "reason": ""
   },
-  "Damon Severson": {
+  "Ridly Greig": {
     "team": "UNK",
     "reason": ""
   },
-  "Carter Verhaeghe": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Adam Henrique": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Nick Jensen": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Thatcher Demko": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Troy Terry": {
-    "team": "ANA",
-    "reason": "травма бедра"
-  },
-  "Michael Rasmussen": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jake Bean": {
+  "Christopher Tanev": {
     "team": "UNK",
     "reason": ""
   },
@@ -39,7 +15,15 @@
     "team": "UNK",
     "reason": ""
   },
-  "New York Rangers": {
+  "Pittsburgh Penguins": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Mason Appleton": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Brad Marchand": {
     "team": "UNK",
     "reason": ""
   },
@@ -51,139 +35,7 @@
     "team": "UNK",
     "reason": ""
   },
-  "Nils Hoglander": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Seattle Kraken": {
-    "team": "UNK",
-    "reason": ""
-  },
   "Max Jones": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Brett Pesce": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Nashville Predators": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Dallas Stars": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Dakota Joshua": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Zack MacEwen": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Matt Murray": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Nikita Chibrikov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Philadelphia Flyers": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Detroit Red Wings": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Connor Zary": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Kyle Palmieri": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Owen Tippett": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Calgary Flames": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Buffalo Sabres": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jonah Gadjovich": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Neal Pionk": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Nils Lundkvist": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Max Domi": {
-    "team": "TOR",
-    "reason": "травма спины"
-  },
-  "Artyom Levshunov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Nikita Zadorov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Ryan Pulock": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Ryan Reaves": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Logan Couture": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Eriks Mateiko": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Gustav Forsling": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Alexander Romanov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Carolina Hurricanes": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Colorado Avalanche": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Ty Murchison": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Radko Gudas": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Boston Bruins": {
     "team": "UNK",
     "reason": ""
   },
@@ -191,63 +43,7 @@
     "team": "UNK",
     "reason": ""
   },
-  "Anthony Stolarz": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Elias Salomonsson": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Sam Bennett": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Noah Östlund": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Ryan Poehling": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Columbus Blue Jackets": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Auston Matthews": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Joey Daccord": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Stefan Noesen": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Evander Kane": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Vancouver Canucks": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Calle Jarnkrok": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jonathan Lekkerimaki": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Pierre-Luc Dubois": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Nicolas Hague": {
+  "Anaheim Ducks": {
     "team": "UNK",
     "reason": ""
   },
@@ -255,279 +51,19 @@
     "team": "UNK",
     "reason": ""
   },
-  "Morgan Barron": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Charlie Lindgren": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Washington Capitals": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Alex Pietrangelo": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jared McCann": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Arttu Hyry": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Uvis Balinskis": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Viktor Arvidsson": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Filip Hallander": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Pontus Holmberg": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Edmonton Oilers": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Drew Helleson": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Matt Rempe": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jacob Markstrom": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Dans Locmelis": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Valeri Nichushkin": {
-    "team": "COL",
-    "reason": "травма нижней части тела"
-  },
-  "Toronto Maple Leafs": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jonathan Marchessault": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Pittsburgh Penguins": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Derek Forbort": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Pierre Engvall": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Brandon Carlo": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Niko Mikkola": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Brendan Smith": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Winnipeg Jets": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Filip Chytil": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Tyler Seguin": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Torey Krug": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jonas Siegenthaler": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Zach Bogosian": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Maxim Shabanov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jiri Kulich": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Mason Appleton": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Chicago Blackhawks": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "New Jersey Devils": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Ryan Ellis": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Filip Gustavsson": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Aaron Ekblad": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Florida Panthers": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Andrew Mangiapane": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jonathan Huberdeau": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Matt Grzelcyk": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Vladislav Namestnikov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Charlie Stramel": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Petr Mrazek": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Los Angeles Kings": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Max McCormick": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Rodrigo Abols": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Rasmus Sandin": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Noah Cates": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Charlie McAvoy": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Anaheim Ducks": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jonas Brodin": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Joel Eriksson Ek": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Mathew Barzal": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jordan Kyrou": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Tampa Bay Lightning": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Christopher Tanev": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Yan Kuznetsov": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Tomas Nosek": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Jake Sanderson": {
-    "team": "UNK",
-    "reason": ""
-  },
   "Nikita Grebenkin": {
     "team": "UNK",
     "reason": ""
   },
-  "San Jose Sharks": {
+  "Carter Verhaeghe": {
     "team": "UNK",
     "reason": ""
   },
-  "Mattias Janmark": {
+  "Nils Lundkvist": {
     "team": "UNK",
     "reason": ""
   },
-  "Roope Hintz": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Kevin Bahl": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Artyom Zub": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Ottawa Senators": {
-    "team": "UNK",
-    "reason": ""
-  },
-  "Caleb Jones": {
+  "Connor Zary": {
     "team": "UNK",
     "reason": ""
   },
@@ -535,39 +71,91 @@
     "team": "UNK",
     "reason": ""
   },
-  "Dmitri Voronkov": {
+  "Zach Bogosian": {
     "team": "UNK",
     "reason": ""
   },
-  "Kevin Fiala": {
+  "San Jose Sharks": {
     "team": "UNK",
     "reason": ""
   },
-  "Evan Rodrigues": {
+  "Charlie McAvoy": {
     "team": "UNK",
     "reason": ""
   },
-  "Utah Mammoth": {
+  "Filip Hallander": {
     "team": "UNK",
     "reason": ""
   },
-  "Barrett Hayton": {
+  "Tyler Seguin": {
     "team": "UNK",
     "reason": ""
   },
-  "Ridly Greig": {
+  "Petr Mrazek": {
     "team": "UNK",
     "reason": ""
   },
-  "Brad Marchand": {
+  "Gustav Forsling": {
     "team": "UNK",
     "reason": ""
   },
-  "Henry Mews": {
+  "Elias Salomonsson": {
     "team": "UNK",
     "reason": ""
   },
-  "Minnesota Wild": {
+  "Radko Gudas": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Brendan Smith": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Andrew Mangiapane": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Logan Couture": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Detroit Red Wings": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Artyom Zub": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Pierre-Luc Dubois": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Ryan Ellis": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Evander Kane": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Nikita Chibrikov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jonathan Huberdeau": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Nick Jensen": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Owen Tippett": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Washington Capitals": {
     "team": "UNK",
     "reason": ""
   },
@@ -575,19 +163,31 @@
     "team": "UNK",
     "reason": ""
   },
-  "Vegas Golden Knights": {
+  "Brett Pesce": {
     "team": "UNK",
     "reason": ""
   },
-  "Gustav Nyquist": {
+  "Columbus Blue Jackets": {
     "team": "UNK",
     "reason": ""
   },
-  "Justin Danforth": {
+  "Viktor Arvidsson": {
     "team": "UNK",
     "reason": ""
   },
-  "Dmitry Kulikov": {
+  "Filip Chytil": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Drew Helleson": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Montreal Canadiens": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Matt Grzelcyk": {
     "team": "UNK",
     "reason": ""
   },
@@ -599,7 +199,407 @@
     "team": "UNK",
     "reason": ""
   },
+  "Seattle Kraken": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Winnipeg Jets": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Nashville Predators": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Sam Bennett": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jiri Kulich": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Charlie Lindgren": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Dans Locmelis": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Utah Mammoth": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Kevin Fiala": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Thatcher Demko": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Matt Murray": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Niko Mikkola": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Toronto Maple Leafs": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Ryan Reaves": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Derek Forbort": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Max McCormick": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Alexander Romanov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Max Domi": {
+    "team": "TOR",
+    "reason": "травма спины"
+  },
+  "Dakota Joshua": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Dmitry Kulikov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Rodrigo Abols": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Pierre Engvall": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Noah Cates": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Damon Severson": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Vancouver Canucks": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Valeri Nichushkin": {
+    "team": "COL",
+    "reason": "травма нижней части тела"
+  },
+  "Jared McCann": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Carolina Hurricanes": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Minnesota Wild": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Kevin Bahl": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Artyom Levshunov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jonathan Marchessault": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Charlie Stramel": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jacob Markstrom": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Los Angeles Kings": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Henry Mews": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Florida Panthers": {
+    "team": "UNK",
+    "reason": ""
+  },
   "St. Louis Blues": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jake Bean": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Mathew Barzal": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Evan Rodrigues": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Uvis Balinskis": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Nils Hoglander": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Kyle Palmieri": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Morgan Barron": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Adam Henrique": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Caleb Jones": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Ty Murchison": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Auston Matthews": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Colorado Avalanche": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Michael Rasmussen": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Edmonton Oilers": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jonah Gadjovich": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Tampa Bay Lightning": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Brandon Carlo": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Ryan Poehling": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Arttu Hyry": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Tomas Nosek": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Yan Kuznetsov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Nicolas Hague": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Ryan Pulock": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Matt Rempe": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Dallas Stars": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Chicago Blackhawks": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Filip Gustavsson": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Mattias Janmark": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Philadelphia Flyers": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Noah Östlund": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Gustav Nyquist": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Roope Hintz": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Aaron Ekblad": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Vegas Golden Knights": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Neal Pionk": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Calgary Flames": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jake Sanderson": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Rasmus Sandin": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Calle Jarnkrok": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Justin Danforth": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Troy Terry": {
+    "team": "ANA",
+    "reason": "травма бедра"
+  },
+  "Vladislav Namestnikov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jordan Kyrou": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "New York Rangers": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Nikita Zadorov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Buffalo Sabres": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Alex Pietrangelo": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "New Jersey Devils": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Stefan Noesen": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Joel Eriksson Ek": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jonas Siegenthaler": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Anthony Stolarz": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jonathan Lekkerimaki": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Dmitri Voronkov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Boston Bruins": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Eriks Mateiko": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Joey Daccord": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Torey Krug": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Barrett Hayton": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Jonas Brodin": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Maxim Shabanov": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Zack MacEwen": {
+    "team": "UNK",
+    "reason": ""
+  },
+  "Ottawa Senators": {
     "team": "UNK",
     "reason": ""
   }
