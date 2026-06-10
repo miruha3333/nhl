@@ -374,8 +374,9 @@ async def main():
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
 
-        # Все строки с игроками — только те у кого есть ссылка pp_link
-        all_player_rows = await page.query_selector_all("tr:has(a.pp_link)")
+        # Все строки где ссылка ведёт именно на профиль игрока (/player/)
+        # Это исключает строки-разделители команд у которых ссылка /team/
+        all_player_rows = await page.query_selector_all("tr:has(a.pp_link[href*='/player/'])")
         print(f"  Строк с игроками на странице: {len(all_player_rows)}")
 
         # Проход 1: собираем ВСЕ имена — без заходов в профили
@@ -383,7 +384,8 @@ async def main():
             cells = await row.query_selector_all("td")
             if not cells:
                 continue
-            name_link = await cells[0].query_selector("a.pp_link")
+            # Берём только ссылку на профиль игрока
+            name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
             if not name_link:
                 continue
             raw_name = format_name((await name_link.inner_text()).strip())
@@ -398,7 +400,7 @@ async def main():
             cells = await row.query_selector_all("td")
             if not cells:
                 continue
-            name_link = await cells[0].query_selector("a.pp_link")
+            name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
             if not name_link:
                 continue
             player_url = await name_link.get_attribute("href")
