@@ -4,7 +4,6 @@ import re
 import subprocess
 import requests
 import json
-from datetime import datetime
 from playwright.async_api import async_playwright
 
 # --- НАСТРОЙКИ ---
@@ -91,23 +90,17 @@ NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 
+# Минимальное количество игроков в списке травм при котором доверяем загрузке.
+# Если меньше — считаем что страница не загрузилась и пропускаем весь блок травм.
+INJURIES_MIN_COUNT = 50
+
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
 # =============================================================================
-# СНАПШОТ ТРАВМ
-# Отдельный файл injuries_snapshot.json — никогда не участвует в миграциях кэша.
-# Формат:
-# {
-#   "William Carrier": {
-#       "team": "CAR",
-#       "reason": "травма верхней части тела",
-#       "url": "/player/william-carrier"   <- для захода в профиль при выздоровлении
-#   },
-#   ...
-# }
-# url есть только у игроков из топ-3 и тех кто попал в снапшот через топ-3 ранее.
-# Для остальных url = "" — при выздоровлении публикуем без клуба.
+# СНАПШОТ ТРАВМ — отдельный файл, никогда не участвует в миграциях кэша.
+# Формат: {"William Carrier": {"team": "CAR", "reason": "...", "url": "/player/..."}}
+# Обновляется ТОЛЬКО если список загрузился полностью (>= INJURIES_MIN_COUNT).
 # =============================================================================
 
 def load_injuries_snapshot():
@@ -116,9 +109,7 @@ def load_injuries_snapshot():
     try:
         with open(INJURIES_SNAPSHOT_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if not isinstance(data, dict):
-                return {}
-            return data
+            return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
@@ -184,13 +175,27 @@ def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
+def commit_cache():
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+            subprocess.run(["git", "add", CACHE_FILE], check=True)
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            if status.stdout.strip():
+                subprocess.run(["git", "commit", "-m", "Обновление кэша [skip ci]"], check=True)
+                subprocess.run(["git", "push"], check=True)
+                print("Кэш сохранён в репозиторий.")
+        except Exception as e:
+            print(f"Ошибка сохранения кэша: {e}")
+
 # =============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # =============================================================================
 
 def extract_player_name(line):
     clean = line
-    for emoji in ["❌", "⬆️", "⬅️", "➡️", "📝", "🔄", "✅"]:
+    for emoji in ["❌", "✅", "⬆️", "⬅️", "➡️", "📝", "🔄"]:
         clean = clean.replace(emoji, "")
     return clean.split("(")[0].strip()
 
@@ -337,14 +342,10 @@ async def main():
     raw_signings = []
     raw_trades = []
     current_waivers = []
-
-    # Травмы:
-    # current_injuries_top      — топ-3: (name, team, reason, url) — для публикации новых
-    # current_injury_names_all  — все имена на странице — для отслеживания выздоровлений
-    # current_injury_urls       — словарь {name: url} для всех игроков у кого есть url
-    current_injuries_top = []
-    current_injury_names_all = set()
-    current_injury_urls = {}
+    current_injury_names_all = set()   # все имена со страницы
+    current_injury_urls = {}           # {имя: url профиля}
+    current_injuries_top = []          # топ-3: (name, team, reason, url)
+    injuries_loaded_ok = False         # флаг успешной загрузки
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -370,11 +371,10 @@ async def main():
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
 
-        # Только строки с игроками — ссылка ведёт на /player/, не на /team/
         all_player_rows = await page.query_selector_all("tr:has(a.pp_link[href*='/player/'])")
-        print(f"  Строк с игроками на странице: {len(all_player_rows)}")
+        print(f"  Строк с игроками: {len(all_player_rows)}")
 
-        # Проход 1: все имена + url — без заходов в профили
+        # Проход 1: все имена и url — без заходов в профили
         for row in all_player_rows:
             cells = await row.query_selector_all("td")
             if not cells:
@@ -391,24 +391,54 @@ async def main():
 
         print(f"  Всего травмированных: {len(current_injury_names_all)}")
 
-        # Проход 2: топ-3 — заходим в профили для определения команды
-        raw_injury_entries = []
-        for row in all_player_rows[:3]:
-            cells = await row.query_selector_all("td")
-            if not cells:
-                continue
-            name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
-            if not name_link:
-                continue
-            player_url = await name_link.get_attribute("href")
-            name = format_name((await name_link.inner_text()).strip())
-            reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
-            raw_injury_entries.append((name, reason, player_url))
+        # ЗАЩИТА: если список слишком мал — страница не загрузилась, пропускаем блок травм
+        if len(current_injury_names_all) >= INJURIES_MIN_COUNT:
+            injuries_loaded_ok = True
 
-        for name, reason, player_url in raw_injury_entries:
-            team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
-            current_injuries_top.append((name, team_abbr, reason, player_url))
-            print(f"  Топ-3: ❌ {name} ({team_abbr}), {reason}")
+            # Проход 2: топ-3 — заходим в профили для команды
+            raw_injury_entries = []
+            for row in all_player_rows[:3]:
+                cells = await row.query_selector_all("td")
+                if not cells:
+                    continue
+                name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
+                if not name_link:
+                    continue
+                player_url = await name_link.get_attribute("href")
+                name = format_name((await name_link.inner_text()).strip())
+                reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
+                raw_injury_entries.append((name, reason, player_url))
+
+            for name, reason, player_url in raw_injury_entries:
+                team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
+                current_injuries_top.append((name, team_abbr, reason, player_url))
+                print(f"  Топ-3: ❌ {name} ({team_abbr}), {reason}")
+
+            # Заходим в профили для выздоровевших (определяем текущий клуб)
+            prev_snapshot = load_injuries_snapshot()
+            prev_names = set(prev_snapshot.keys())
+            recovered = prev_names - current_injury_names_all
+
+            recovered_lines = []
+            if recovered and len(prev_names) > 0:
+                print(f"  Выздоровевших: {len(recovered)}, определяем клубы...")
+                for name in sorted(recovered):
+                    player_url = prev_snapshot[name].get("url", "")
+                    if player_url:
+                        team_abbr = await get_team_from_profile(page, player_url)
+                        if team_abbr and team_abbr != "UNK":
+                            line = f"✅ {name} ({team_abbr}) активирован из списка травмированных"
+                        else:
+                            line = f"✅ {name} активирован из списка травмированных"
+                    else:
+                        line = f"✅ {name} активирован из списка травмированных"
+                    recovered_lines.append(line)
+                    print(f"  Выздоровление: {line}")
+        else:
+            print(f"  ЗАЩИТА: список травм слишком мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок травм пропускается.")
+            prev_snapshot = load_injuries_snapshot()
+            prev_names = set(prev_snapshot.keys())
+            recovered_lines = []
 
         # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
@@ -437,30 +467,6 @@ async def main():
                 if count >= 3:
                     break
 
-        # --- ВЫЗДОРОВЛЕНИЯ: заходим в профили для определения текущего клуба ---
-        prev_snapshot = load_injuries_snapshot()
-        prev_names = set(prev_snapshot.keys())
-        is_first_run = len(prev_snapshot) == 0
-
-        recovered = prev_names - current_injury_names_all
-        recovered_lines = []
-
-        if not is_first_run and recovered:
-            print(f"  Выздоровевших: {len(recovered)}, определяем клубы...")
-            for name in sorted(recovered):
-                # Берём url из снапшота (был сохранён при первом появлении игрока)
-                player_url = prev_snapshot[name].get("url", "")
-                if player_url:
-                    team_abbr = await get_team_from_profile(page, player_url)
-                    if team_abbr and team_abbr != "UNK":
-                        line = f"✅ {name} ({team_abbr}) активирован из списка травмированных"
-                    else:
-                        line = f"✅ {name} активирован из списка травмированных"
-                else:
-                    line = f"✅ {name} активирован из списка травмированных"
-                recovered_lines.append(line)
-                print(f"  Выздоровление: {line}")
-
         await browser.close()
 
     # --- ПРОВЕРКА ЗАГРУЗКИ ---
@@ -471,9 +477,7 @@ async def main():
         print("Трейды не загрузились. Операция прервана.")
         return
 
-    print(f"Снапшот: было {len(prev_names)}, сейчас {len(current_injury_names_all)}")
-
-    # --- ЗАГРУЖАЕМ ОСНОВНОЙ КЭШ ---
+    # --- ЗАГРУЖАЕМ КЭШ ---
     cache = load_cache()
     all_new = []
 
@@ -558,35 +562,40 @@ async def main():
         cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
     # --- ТРАВМЫ ---
-    if is_first_run:
-        print("Первый запуск: снапшот создаётся, публикаций нет.")
-    else:
-        # Новые травмы — только из топ-3
-        for name, team_abbr, reason, _ in current_injuries_top:
-            if name not in prev_names:
-                line = f"❌ {name} ({team_abbr}), {reason}"
-                all_new.append(line)
-                print(f"  Новая травма: {line}")
+    if injuries_loaded_ok:
+        is_first_run = len(prev_snapshot) == 0
 
-        # Выздоровления — уже с клубами, собраны внутри async with
-        all_new.extend(recovered_lines)
-
-        print(f"Новых травм: {sum(1 for n,_,_,_ in current_injuries_top if n not in prev_names)}, выздоровлений: {len(recovered_lines)}")
-
-    # Обновляем снапшот
-    new_snapshot = {}
-    top3_dict = {n: (t, r, u) for n, t, r, u in current_injuries_top}
-    for name in current_injury_names_all:
-        if name in top3_dict:
-            team, reason, url = top3_dict[name]
-            new_snapshot[name] = {"team": team, "reason": reason, "url": url or ""}
-        elif name in prev_snapshot:
-            # Сохраняем старые данные включая url
-            new_snapshot[name] = prev_snapshot[name]
+        if is_first_run:
+            print("Первый запуск снапшота травм: публикаций нет, снапшот создаётся.")
         else:
-            # Новый не из топ-3 — url из current_injury_urls если есть
-            url = current_injury_urls.get(name, "")
-            new_snapshot[name] = {"team": "UNK", "reason": "", "url": url}
+            # Новые травмы — только из топ-3
+            for name, team_abbr, reason, _ in current_injuries_top:
+                if name not in prev_names:
+                    line = f"❌ {name} ({team_abbr}), {reason}"
+                    all_new.append(line)
+                    print(f"  Новая травма: {line}")
+
+            # Выздоровления — с клубами
+            all_new.extend(recovered_lines)
+
+        # Обновляем снапшот
+        new_snapshot = {}
+        top3_dict = {n: (t, r, u) for n, t, r, u in current_injuries_top}
+        for name in current_injury_names_all:
+            if name in top3_dict:
+                team, reason, url = top3_dict[name]
+                new_snapshot[name] = {"team": team, "reason": reason, "url": url or ""}
+            elif name in prev_snapshot:
+                new_snapshot[name] = prev_snapshot[name]
+            else:
+                url = current_injury_urls.get(name, "")
+                new_snapshot[name] = {"team": "UNK", "reason": "", "url": url}
+
+        save_injuries_snapshot(new_snapshot)
+        commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
+        print(f"Снапшот травм обновлён: {len(new_snapshot)} игроков.")
+    else:
+        print("Снапшот травм не обновляется — список не загрузился.")
 
     # --- УЭЙВЕР ---
     seen_waiver_names = set(cache["waivers"].get("seen", []))
@@ -602,13 +611,9 @@ async def main():
     all_new.extend(new_waivers)
     cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
 
-    # --- СОХРАНЯЕМ СНАПШОТ (всегда) ---
-    save_injuries_snapshot(new_snapshot)
-    commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
-
     # --- СОХРАНЯЕМ КЭШ (всегда) ---
     save_cache(cache)
-    commit_file(CACHE_FILE, "Обновление кэша")
+    commit_cache()
 
     if not all_new:
         print("Новых событий нет. Скрипт завершен без отправки.")
