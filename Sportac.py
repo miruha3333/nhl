@@ -80,6 +80,7 @@ INJURY_MAPPING = {
     "ribs": "травма ребра", "shoulder": "травма плеча", "face": "травма лица", "concussion": "сотрясение мозга",
     "hand": "травма руки", "groin": "травма паха", "personal": "личная причина", "finger": "травма пальца",
     "thumb": "травма большого пальца", "lower leg": "травма голени", "achilles": "травма ахилла",
+    "arm": "травма руки",
     "back": "травма спины", "knee": "травма колена", "neck": "травма шеи", "wrist": "травма запястья",
     "illness": "болезнь", "elbow": "травма локтя", "chest": "травма грудной клетки"
 }
@@ -255,15 +256,19 @@ def format_cap_hit(val_raw):
 def translate_trade(text):
     if "forfeit" in text.lower():
         return text
-    pattern = r"The (.+?) acquire (.+?) from the (.+?) for (.+)"
-    match = re.search(pattern, text)
-    if match:
-        team1, p1, team2, p2 = match.groups()
-        rus_team1_data = get_rus_team_data(team1)
-        rus_team2_data = get_rus_team_data(team2)
-        p1 = p1.replace(".", "").replace(" and ", " и ")
-        p2 = p2.replace(".", "").replace(" and ", " и ")
-        return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
+    # Пробуем оба варианта: "from the X" и "from X" (без артикля)
+    for pattern in [
+        r"The (.+?) acquire (.+?) from the (.+?) for (.+)",
+        r"The (.+?) acquire (.+?) from (.+?) for (.+)"
+    ]:
+        match = re.search(pattern, text)
+        if match:
+            team1, p1, team2, p2 = match.groups()
+            rus_team1_data = get_rus_team_data(team1)
+            rus_team2_data = get_rus_team_data(team2)
+            p1 = p1.replace(".", "").replace(" and ", " и ")
+            p2 = p2.replace(".", "").replace(" and ", " и ")
+            return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
     return text
 
 def translate_injury(raw):
