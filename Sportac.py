@@ -6,8 +6,6 @@ import requests
 import json
 from playwright.async_api import async_playwright
 
-# --- НАСТРОЙКИ ---
-
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
     'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN', 'islanders': 'NYI',
@@ -36,15 +34,6 @@ TEAM_MAPPING_SLUG = {
     'hurricanes': 'CAR', 'penguins': 'PIT', 'capitals': 'WSH', 'canadiens': 'MTL', 'senators': 'OTT',
     'red-wings': 'DET', 'maple-leafs': 'TOR', 'oilers': 'EDM', 'panthers': 'FLA', 'lightning': 'TBL',
     'stars': 'DAL', 'avalanche': 'COL', 'devils': 'NJD', 'kraken': 'SEA', 'flames': 'CGY', 'blues': 'STL'
-}
-
-# Числовые ID команд PuckPedia → аббревиатуры
-TEAM_ID_MAPPING = {
-    1: 'NJD', 2: 'NYI', 3: 'NYR', 4: 'PHI', 5: 'PIT', 6: 'BOS', 7: 'BUF', 8: 'MTL',
-    9: 'OTT', 10: 'TOR', 12: 'CAR', 13: 'FLA', 14: 'TBL', 15: 'WSH', 16: 'CHI', 17: 'DET',
-    18: 'NSH', 19: 'STL', 20: 'CGY', 21: 'COL', 22: 'EDM', 23: 'VAN', 24: 'ANA', 25: 'DAL',
-    26: 'LAK', 28: 'SJS', 29: 'CBJ', 30: 'MIN', 52: 'WPG', 53: 'ARI', 54: 'VGK', 55: 'SEA',
-    269: 'VGK', 270: 'UTAH'
 }
 
 RUS_TEAM_MAPPING = {
@@ -96,6 +85,58 @@ INJURY_MAPPING = {
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
+# АХЛ-название → аббревиатура НХЛ-клуба (аффилиат)
+AHL_TEAM_MAPPING = {
+    'chicago': 'CAR',       # Chicago Wolves → Carolina Hurricanes
+    'colorado': 'COL',      # Colorado Eagles → Colorado Avalanche
+    'henderson': 'VGK',     # Henderson Silver Knights → Vegas Golden Knights
+    'laval': 'MTL',         # Laval Rocket → Montreal Canadiens
+    'springfield': 'STL',   # Springfield Thunderbirds → St. Louis Blues
+    'toronto': 'TOR',       # Toronto Marlies → Toronto Maple Leafs
+    'belleville': 'OTT',    # Belleville Senators → Ottawa Senators
+    'utica': 'VAN',         # Utica Comets → Vancouver Canucks
+    'tucson': 'ARI',        # Tucson Roadrunners → Utah Mammoth
+    'san jose': 'SJS',      # San Jose Barracuda → San Jose Sharks
+    'san diego': 'ANA',     # San Diego Gulls → Anaheim Ducks
+    'bakersfield': 'EDM',   # Bakersfield Condors → Edmonton Oilers
+    'abbotsford': 'VAN',    # Abbotsford Canucks → Vancouver Canucks
+    'iowa': 'MIN',          # Iowa Wild → Minnesota Wild
+    'milwaukee': 'NAS',     # Milwaukee Admirals → Nashville Predators
+    'cleveland': 'CBJ',     # Cleveland Monsters → Columbus Blue Jackets
+    'grand rapids': 'DET',  # Grand Rapids Griffins → Detroit Red Wings
+    'charlotte': 'FLA',     # Charlotte Checkers → Florida Panthers
+    'hershey': 'WSH',       # Hershey Bears → Washington Capitals
+    'lehigh valley': 'PHI', # Lehigh Valley Phantoms → Philadelphia Flyers
+    'wilkes': 'NYR',        # Hartford Wolf Pack → NY Rangers
+    'hartford': 'NYR',
+    'bridgeport': 'NYI',    # Bridgeport Islanders → NY Islanders
+    'binghamton': 'NJD',    # Binghamton Devils → New Jersey Devils
+    'lehigh': 'PHI',
+    'rockford': 'CHI',      # Rockford IceHogs → Chicago Blackhawks
+    'texas': 'DAL',         # Texas Stars → Dallas Stars
+    'tucson': 'UTAH',       # Tucson → Utah Mammoth
+    'calgary': 'CGY',       # Stockton Heat / Calgary Wranglers
+    'wranglers': 'CGY',
+    'coachella': 'SEA',     # Coachella Valley Firebirds → Seattle Kraken
+    'providence': 'BOS',    # Providence Bruins → Boston Bruins
+    'rochester': 'BUF',     # Rochester Americans → Buffalo Sabres
+    'syracuse': 'TBL',      # Syracuse Crunch → Tampa Bay Lightning
+    'manitoba': 'WPG',      # Manitoba Moose → Winnipeg Jets
+    'calgary wranglers': 'CGY',
+    'ontario': 'LAK',       # Ontario Reign → LA Kings
+    'stockton': 'CGY',
+    'tucson roadrunners': 'UTAH',
+    'seattle': 'SEA',
+    'new jersey': 'NJD',
+    'pittsburgh': 'PIT',
+}
+
+# Числа прописью → цифры (для дисквалификаций)
+GAMES_WORD_MAP = {
+    'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+    'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10'
+}
+
 NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.json"
 TRANSACTIONS_CACHE_FILE = "transactions_cache.json"
@@ -106,137 +147,197 @@ SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRANSACTIONS_API = "https://puckpedia.com/data/api_transactions?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_transactions%22%2C%22url%22%3A%22transactions%22%2C%22transaction_type%22%3A%22roster%22%2C%22defaultSort%22%3A%22sort_date%22%2C%22sortBy%22%3A%22sort_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 
-# =============================================================================
-# ШАБЛОНЫ ПЕРЕВОДА ТРАНЗАКЦИЙ
-# =============================================================================
+
+def normalize_games(text):
+    """Заменяет 'one game' → '1 игру', 'two games' → '2 игры' и т.д."""
+    def replace_num(m):
+        word = m.group(1).lower()
+        num = GAMES_WORD_MAP.get(word, word)
+        count = int(num) if num.isdigit() else 1
+        if count == 1:
+            return f"{num} игру"
+        elif 2 <= count <= 4:
+            return f"{num} игры"
+        else:
+            return f"{num} игр"
+    text = re.sub(r'\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+games?\b', replace_num, text, flags=re.I)
+    text = re.sub(r'\b(\d+)\s+games?\b', lambda m: f"{m.group(1)} {'игру' if m.group(1)=='1' else 'игры' if int(m.group(1)) in (2,3,4) else 'игр'}", text)
+    return text
+
+
+def get_ahl_nhl_abbr(ahl_city_raw):
+    """По названию АХЛ-города/команды возвращает аббревиатуру НХЛ-аффилиата."""
+    key = ahl_city_raw.lower().strip()
+    # Прямое совпадение
+    if key in AHL_TEAM_MAPPING:
+        return AHL_TEAM_MAPPING[key]
+    # Частичное совпадение
+    for k, v in AHL_TEAM_MAPPING.items():
+        if k in key or key in k:
+            return v
+    return ""
+
+
+def clean_league_prefix(text):
+    """Убирает 'Swedish club', 'Finnish club', 'KHL club' и т.д."""
+    text = re.sub(r'\b(Swedish|Finnish|Russian|Swiss|German|Czech|Slovak|Austrian|Danish|Norwegian|KHL|SHL|Liiga|DEL|NL|ICEHL)\s+club\s+', '', text, flags=re.I)
+    text = re.sub(r'\b(Swedish|Finnish|Russian|Swiss|German|Czech|Slovak|Austrian|Danish|Norwegian)\s+', '', text, flags=re.I)
+    return text.strip()
+
 
 TRANSACTION_PATTERNS = [
-    # Reassigned / sent to AHL
+    # Reassigned / sent to AHL CITY
     (re.compile(r'(\w+)\s+was (?:reassigned|sent) to AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
-     lambda m: f"{m.group(1)} переведён в АХЛ ({m.group(2).strip()})"),
+     lambda m: (m.group(1), 'ahl_to', m.group(2).strip())),
 
-    # Recalled / promoted / called up / brought up / summoned / elevated from AHL
+    # Recalled/called up/brought up/summoned/elevated/promoted from AHL CITY
     (re.compile(r'(\w+)\s+was (?:recalled|promoted|called up|brought up|summoned|elevated)\s+from AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
-     lambda m: f"{m.group(1)} вызван из АХЛ ({m.group(2).strip()})"),
+     lambda m: (m.group(1), 'ahl_from', m.group(2).strip())),
 
-    # elevated from the minors (без названия команды)
+    # elevated from the minors (без названия)
     (re.compile(r'(\w+)\s+was elevated from the minors', re.I),
-     lambda m: f"{m.group(1)} вызван из минорных лиг"),
+     lambda m: (m.group(1), 'minors_from', '')),
 
-    # summoned by TEAM from OHL/WHL/QMJHL
+    # summoned by TEAM from OHL/WHL etc
     (re.compile(r'(\w+)\s+was summoned by (?:the\s+)?(.+?) from (?:OHL|WHL|QMJHL|AHL|ECHL)\s+(\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: f"{m.group(1)} вызван {m.group(2).strip()} из {m.group(3).strip()}"),
+     lambda m: (m.group(1), 'summoned_by', m.group(3).strip())),
 
-    # Placed on IR / injured reserve
+    # Placed on IR
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?(?:injured reserve|IR)\b', re.I),
-     lambda m: f"{m.group(1)} переведён в список травмированных"),
+     lambda m: (m.group(1), 'placed_ir', '')),
 
     # Activated from IR
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?(?:long-term\s+)?(?:injured reserve|IR)\b', re.I),
-     lambda m: f"{m.group(1)} активирован из списка травмированных"),
+     lambda m: (m.group(1), 'activated_ir', '')),
 
-    # will be activated from LTIR
+    # Will be activated from LTIR
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?will be activated from (?:long-term\s+)?(?:injured reserve|LTIR)\b', re.I),
-     lambda m: f"{m.group(1)} будет активирован из долгосрочного списка травмированных"),
+     lambda m: (m.group(1), 'will_activated_ltir', '')),
 
     # Placed on LTIR
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?LTIR\b', re.I),
-     lambda m: f"{m.group(1)} переведён в долгосрочный список травмированных (LTIR)"),
+     lambda m: (m.group(1), 'placed_ltir', '')),
 
     # Activated from LTIR
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?LTIR\b', re.I),
-     lambda m: f"{m.group(1)} активирован из долгосрочного списка травмированных (LTIR)"),
+     lambda m: (m.group(1), 'activated_ltir', '')),
 
     # Suspended for N game(s)
-    (re.compile(r'(\w+)\s+was suspended for (\w[\w\s\-]+?games?)\b', re.I),
-     lambda m: f"{m.group(1)} дисквалифицирован на {m.group(2).strip()}"),
+    (re.compile(r'(\w+)\s+was suspended for ([\w\s]+?games?)\b', re.I),
+     lambda m: (m.group(1), 'suspended', normalize_games(m.group(2).strip()))),
 
-    # is eligible to play / has served suspension
+    # Is eligible to play
     (re.compile(r'(\w+)\s+is eligible to play', re.I),
-     lambda m: f"{m.group(1)} вернулся после дисквалификации"),
+     lambda m: (m.group(1), 'eligible', '')),
 
-    # Claimed off waivers by
+    # Claimed off waivers
     (re.compile(r'(\w+)\s+(?:has been |was )?claimed (?:off waivers\s+)?by (?:the\s+)?(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: f"{m.group(1)} подобран с драфта отказов командой {m.group(2).strip()}"),
+     lambda m: (m.group(1), 'claimed', m.group(2).strip())),
 
     # Cleared waivers
     (re.compile(r'(\w+)\s+(?:has\s+)?cleared waivers', re.I),
-     lambda m: f"{m.group(1)} прошёл драфт отказов"),
+     lambda m: (m.group(1), 'cleared_waivers', '')),
 
     # Released
     (re.compile(r'(\w+)\s+(?:has been |was )?released\b', re.I),
-     lambda m: f"{m.group(1)} освобождён"),
+     lambda m: (m.group(1), 'released', '')),
 
-    # Retiring / ending career
+    # Retiring
     (re.compile(r'(\w+)\s+(?:announced|is)\s+.{0,40}(?:retiring|retirement|ending his playing career)', re.I),
-     lambda m: f"{m.group(1)} завершает карьеру"),
+     lambda m: (m.group(1), 'retiring', '')),
 
     # Loaned to
     (re.compile(r'(\w+)\s+(?:has been |was )?loaned to (.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: f"{m.group(1)} отдан в аренду ({m.group(2).strip()})"),
+     lambda m: (m.group(1), 'loaned', clean_league_prefix(m.group(2).strip()))),
 
     # Signed PTO
     (re.compile(r'(\w+)\s+(?:has been |was )?signed (?:to\s+)?(?:a\s+)?PTO\b', re.I),
-     lambda m: f"{m.group(1)} подписан на пробный контракт (PTO)"),
+     lambda m: (m.group(1), 'pto', '')),
 
-    # Agreed to terms with foreign club
-    (re.compile(r'(\w+)\s+agreed to terms on (?:a\s+)?contract with (.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: f"{m.group(1)} подписал контракт с {m.group(2).strip()}"),
+    # Agreed to terms / signed contract with foreign club
+    (re.compile(r'(\w+)\s+(?:agreed to terms on (?:a\s+)?contract with|signed (?:a\s+)?contract with)\s+(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
+     lambda m: (m.group(1), 'foreign_contract', clean_league_prefix(m.group(2).strip()))),
 
-    # Committed to university/college
+    # Committed to university
     (re.compile(r'(\w+)\s+committed to (?:the\s+)?(.+?)(?:\s+ahead of|\s+for the|\s+on\s+\w+day|\s*\.)', re.I),
-     lambda m: f"{m.group(1)} переходит в студенческую команду {m.group(2).strip()}"),
+     lambda m: (m.group(1), 'committed', m.group(2).strip())),
 
-    # Assigned to AHL (general)
+    # Assigned to AHL (без названия города)
     (re.compile(r'(\w+)\s+(?:has been |was )?assigned to (?:the\s+)?AHL\b', re.I),
-     lambda m: f"{m.group(1)} направлен в АХЛ"),
+     lambda m: (m.group(1), 'assigned_ahl', '')),
 ]
 
-def get_team_abbr_from_ids(team_ids):
-    """Получает аббревиатуру команды из списка числовых ID."""
-    if not team_ids:
-        return ""
-    for tid in team_ids:
-        try:
-            abbr = TEAM_ID_MAPPING.get(int(tid))
-            if abbr:
-                return f"({abbr})"
-        except (ValueError, TypeError):
-            continue
+
+def build_transaction_line(parsed, nhl_abbr=""):
+    """Строит русскую строку из разобранного шаблона."""
+    name, action, arg = parsed
+    tag = f" ({nhl_abbr})" if nhl_abbr else ""
+
+    if action == 'ahl_to':
+        ahl_abbr = get_ahl_nhl_abbr(arg)
+        abbr_str = f" ({ahl_abbr})" if ahl_abbr else ""
+        return f"{name} переведён в АХЛ ({arg}){abbr_str}"
+    elif action == 'ahl_from':
+        ahl_abbr = get_ahl_nhl_abbr(arg)
+        abbr_str = f" ({ahl_abbr})" if ahl_abbr else ""
+        return f"{name} вызван из АХЛ ({arg}){abbr_str}"
+    elif action == 'minors_from':
+        return f"{name} вызван из минорных лиг{tag}"
+    elif action == 'summoned_by':
+        return f"{name} вызван из {arg}{tag}"
+    elif action == 'placed_ir':
+        return f"{name} переведён в список травмированных{tag}"
+    elif action == 'activated_ir':
+        return f"{name} активирован из списка травмированных{tag}"
+    elif action == 'will_activated_ltir':
+        return f"{name} будет активирован из долгосрочного списка травмированных{tag}"
+    elif action == 'placed_ltir':
+        return f"{name} переведён в долгосрочный список травмированных (LTIR){tag}"
+    elif action == 'activated_ltir':
+        return f"{name} активирован из долгосрочного списка травмированных (LTIR){tag}"
+    elif action == 'suspended':
+        return f"{name} дисквалифицирован на {arg}{tag}"
+    elif action == 'eligible':
+        return f"{name} вернулся после дисквалификации{tag}"
+    elif action == 'claimed':
+        return f"{name} подобран с драфта отказов командой {arg}{tag}"
+    elif action == 'cleared_waivers':
+        return f"{name} прошёл драфт отказов{tag}"
+    elif action == 'released':
+        return f"{name} освобождён{tag}"
+    elif action == 'retiring':
+        return f"{name} завершает карьеру{tag}"
+    elif action == 'loaned':
+        return f"{name} отдан в аренду ({arg}){tag}"
+    elif action == 'pto':
+        return f"{name} подписан на пробный контракт (PTO){tag}"
+    elif action == 'foreign_contract':
+        return f"{name} подписал контракт с {arg}{tag}"
+    elif action == 'committed':
+        return f"{name} переходит в студенческую команду {arg}{tag}"
+    elif action == 'assigned_ahl':
+        return f"{name} направлен в АХЛ{tag}"
     return ""
 
-def translate_transaction(raw_text, team_abbr=""):
-    """Переводит текст транзакции по шаблонам."""
+
+def translate_transaction(raw_text):
+    """Переводит текст транзакции. Аббревиатура берётся из текста, не из team_ids."""
     text = re.sub(r'<[^>]+>', '', raw_text).strip()
-    for pattern, formatter in TRANSACTION_PATTERNS:
+    for pattern, extractor in TRANSACTION_PATTERNS:
         m = pattern.search(text)
         if m:
             try:
-                result = formatter(m)
-                # Добавляем аббревиатуру команды если есть и её ещё нет в строке
-                if team_abbr and team_abbr not in result:
-                    result = f"{result} {team_abbr}"
-                return result
+                parsed = extractor(m)
+                result = build_transaction_line(parsed)
+                if result:
+                    return result
             except Exception:
                 continue
-    # Шаблон не подошёл — оригинал без тегов + аббревиатура если есть
-    if team_abbr:
-        return f"{text} {team_abbr}"
+    # Шаблон не подошёл — возвращаем оригинал
     return text
 
-# =============================================================================
-# КЭش ТРАНЗАКЦИЙ (отдельный файл)
-# =============================================================================
 
 def load_transactions_cache():
-    """
-    Структура:
-    {
-        "last_date": "2026-06-12",
-        "last_id": "12345",
-        "recent": ["строка1", "строка2", ...]  // последние 5 для отладки
-    }
-    """
     default = {"last_date": "", "last_id": "", "recent": []}
     if not os.path.exists(TRANSACTIONS_CACHE_FILE):
         return default
@@ -245,23 +346,18 @@ def load_transactions_cache():
             data = json.load(f)
         if not isinstance(data, dict):
             return default
-        if "last_date" not in data:
-            data["last_date"] = ""
-        if "last_id" not in data:
-            data["last_id"] = ""
-        if "recent" not in data:
-            data["recent"] = []
+        for k, v in default.items():
+            if k not in data:
+                data[k] = v
         return data
     except Exception:
         return default
+
 
 def save_transactions_cache(cache):
     with open(TRANSACTIONS_CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
-# =============================================================================
-# СНАПШОТ ТРАВМ
-# =============================================================================
 
 def load_injuries_snapshot():
     if not os.path.exists(INJURIES_SNAPSHOT_FILE):
@@ -273,9 +369,11 @@ def load_injuries_snapshot():
     except Exception:
         return {}
 
+
 def save_injuries_snapshot(snapshot):
     with open(INJURIES_SNAPSHOT_FILE, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
+
 
 def commit_file(filepath, message):
     if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -291,9 +389,6 @@ def commit_file(filepath, message):
         except Exception as e:
             print(f"  Ошибка сохранения {filepath}: {e}")
 
-# =============================================================================
-# ОСНОВНОЙ КЭШ
-# =============================================================================
 
 def load_cache():
     default = {
@@ -308,7 +403,6 @@ def load_cache():
             data = json.load(f)
     except Exception:
         return default
-
     for key in ("signings", "trades"):
         if not isinstance(data.get(key), dict):
             data[key] = {"last_date": "", "last_id": ""}
@@ -323,9 +417,11 @@ def load_cache():
             data[k] = v
     return data
 
+
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
+
 
 def commit_cache():
     if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -341,9 +437,6 @@ def commit_cache():
         except Exception as e:
             print(f"Ошибка кэша: {e}")
 
-# =============================================================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-# =============================================================================
 
 def extract_player_name(line):
     clean = line
@@ -351,12 +444,14 @@ def extract_player_name(line):
         clean = clean.replace(emoji, "")
     return clean.split("(")[0].strip()
 
+
 def get_rus_team_data(eng_name):
     clean_name = eng_name.strip()
     for key, value in RUS_TEAM_MAPPING.items():
         if clean_name.lower() in key.lower():
             return value
     return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
+
 
 def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
@@ -372,6 +467,7 @@ def send_to_telegram(text):
         except Exception as e:
             print(f"Ошибка отправки: {e}")
 
+
 def get_team_abbr_by_name(team_name_raw):
     if not team_name_raw:
         return ""
@@ -381,9 +477,11 @@ def get_team_abbr_by_name(team_name_raw):
             return f"({abbr})"
     return f"({clean_name[:3].upper()})"
 
+
 def get_team_abbr_by_slug(slug):
     key = slug.split('/')[-1]
     return TEAM_MAPPING_SLUG.get(key, key.upper())
+
 
 def format_years(years_raw):
     try:
@@ -397,12 +495,14 @@ def format_years(years_raw):
     else:
         return f"на {years} лет"
 
+
 def format_cap_hit(val_raw):
     try:
         clean_val = int(re.sub(r'[^0-9]', '', str(val_raw)))
         return f"{clean_val:,}"
     except Exception:
         return f"{val_raw}"
+
 
 def translate_trade(text):
     if "forfeit" in text.lower():
@@ -421,8 +521,10 @@ def translate_trade(text):
             return f"{r1['main']} {p2} на {p1} {r2['from']}"
     return text
 
+
 def translate_injury(raw):
     return INJURY_MAPPING.get(raw.lower().strip(), raw)
+
 
 def format_name(n):
     n = n.replace('\n', ' ').strip()
@@ -430,6 +532,7 @@ def format_name(n):
         parts = n.split(",")
         return f"{parts[1].strip()} {parts[0].strip()}"
     return n
+
 
 def extract_list(data):
     try:
@@ -446,6 +549,7 @@ def extract_list(data):
     except Exception as e:
         print(f"Ошибка извлечения списка: {e}")
     return []
+
 
 async def fetch_api(page, url, label):
     for attempt in range(5):
@@ -478,6 +582,7 @@ async def fetch_api(page, url, label):
             await asyncio.sleep(5)
     return []
 
+
 async def get_team_from_profile(page, player_url):
     await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
     await asyncio.sleep(1.5)
@@ -489,9 +594,6 @@ async def get_team_from_profile(page, player_url):
         return get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
     return "UNK"
 
-# =============================================================================
-# ГЛАВНАЯ ФУНКЦИЯ
-# =============================================================================
 
 async def main():
     raw_signings = []
@@ -619,7 +721,6 @@ async def main():
 
         await browser.close()
 
-    # --- ПРОВЕРКА ЗАГРУЗКИ ---
     if not raw_signings:
         print("Подписания не загрузились. Операция прервана.")
         return
@@ -729,22 +830,17 @@ async def main():
         raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
         if not raw_text or len(raw_text) < 10:
             continue
-        # Получаем аббревиатуру команды из числовых ID
-        team_ids = item.get("team_ids", [])
-        team_abbr = get_team_abbr_from_ids(team_ids)
-        translated = translate_transaction(raw_text, team_abbr)
+        translated = translate_transaction(raw_text)
         if translated not in seen_tx:
             seen_tx.add(translated)
             line = f"🏒 {translated}"
             all_new.append(line)
             new_tx_lines.append(translated)
 
-    # Обновляем кэш транзакций
     if raw_transactions:
         first = raw_transactions[0]
         tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
         tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
-    # Храним последние 5 строк для отладки
     existing_recent = tx_cache.get("recent", [])
     tx_cache["recent"] = (new_tx_lines + existing_recent)[:5]
     save_transactions_cache(tx_cache)
@@ -804,6 +900,7 @@ async def main():
     message = "\n\n".join(all_new)
     send_to_telegram(message)
     print(f"Отправлено {len(all_new)} новых записей в Telegram.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
