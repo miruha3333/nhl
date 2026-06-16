@@ -38,6 +38,15 @@ TEAM_MAPPING_SLUG = {
     'stars': 'DAL', 'avalanche': 'COL', 'devils': 'NJD', 'kraken': 'SEA', 'flames': 'CGY', 'blues': 'STL'
 }
 
+# Числовые ID команд PuckPedia → аббревиатуры
+TEAM_ID_MAPPING = {
+    1: 'NJD', 2: 'NYI', 3: 'NYR', 4: 'PHI', 5: 'PIT', 6: 'BOS', 7: 'BUF', 8: 'MTL',
+    9: 'OTT', 10: 'TOR', 12: 'CAR', 13: 'FLA', 14: 'TBL', 15: 'WSH', 16: 'CHI', 17: 'DET',
+    18: 'NSH', 19: 'STL', 20: 'CGY', 21: 'COL', 22: 'EDM', 23: 'VAN', 24: 'ANA', 25: 'DAL',
+    26: 'LAK', 28: 'SJS', 29: 'CBJ', 30: 'MIN', 52: 'WPG', 53: 'ARI', 54: 'VGK', 55: 'SEA',
+    269: 'VGK', 270: 'UTAH'
+}
+
 RUS_TEAM_MAPPING = {
     'Buffalo Sabres': {'main': 'Баффало обменяли', 'from': 'из Баффало'},
     'Carolina Hurricanes': {'main': 'Каролина обменяла', 'from': 'из Каролины'},
@@ -87,43 +96,67 @@ INJURY_MAPPING = {
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
-# Шаблоны для перевода транзакций (MOVES)
-# Каждый шаблон: (regex-паттерн, lambda для формирования строки)
+NAV_LINKS_COUNT = 64
+CACHE_FILE = "last_data_cache.json"
+TRANSACTIONS_CACHE_FILE = "transactions_cache.json"
+INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
+INJURIES_MIN_COUNT = 50
+
+SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
+TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
+TRANSACTIONS_API = "https://puckpedia.com/data/api_transactions?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_transactions%22%2C%22url%22%3A%22transactions%22%2C%22transaction_type%22%3A%22roster%22%2C%22defaultSort%22%3A%22sort_date%22%2C%22sortBy%22%3A%22sort_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
+
+# =============================================================================
+# ШАБЛОНЫ ПЕРЕВОДА ТРАНЗАКЦИЙ
+# =============================================================================
+
 TRANSACTION_PATTERNS = [
-    # Reassigned to AHL
-    (re.compile(r'(\w+)\s+was reassigned to AHL (\w[\w\s]+?)(?:\s+on\s+\w+day)?[,.]', re.I),
+    # Reassigned / sent to AHL
+    (re.compile(r'(\w+)\s+was (?:reassigned|sent) to AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
      lambda m: f"{m.group(1)} переведён в АХЛ ({m.group(2).strip()})"),
 
-    # Recalled from AHL
-    (re.compile(r'(\w+)\s+was (?:recalled|promoted) from AHL (\w[\w\s]+?)(?:\s+on\s+\w+day)?[,.]', re.I),
+    # Recalled / promoted / called up / brought up / summoned / elevated from AHL
+    (re.compile(r'(\w+)\s+was (?:recalled|promoted|called up|brought up|summoned|elevated)\s+from AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
      lambda m: f"{m.group(1)} вызван из АХЛ ({m.group(2).strip()})"),
 
+    # elevated from the minors (без названия команды)
+    (re.compile(r'(\w+)\s+was elevated from the minors', re.I),
+     lambda m: f"{m.group(1)} вызван из минорных лиг"),
+
+    # summoned by TEAM from OHL/WHL/QMJHL
+    (re.compile(r'(\w+)\s+was summoned by (?:the\s+)?(.+?) from (?:OHL|WHL|QMJHL|AHL|ECHL)\s+(\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
+     lambda m: f"{m.group(1)} вызван {m.group(2).strip()} из {m.group(3).strip()}"),
+
     # Placed on IR / injured reserve
-    (re.compile(r'(\w+)\s+(?:has been |was )?placed on (?:the\s+)?(?:injured reserve|IR)\b', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?(?:injured reserve|IR)\b', re.I),
      lambda m: f"{m.group(1)} переведён в список травмированных"),
 
     # Activated from IR
-    (re.compile(r'(\w+)\s+(?:has been |was )?activated from (?:the\s+)?(?:injured reserve|IR)\b', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?(?:long-term\s+)?(?:injured reserve|IR)\b', re.I),
      lambda m: f"{m.group(1)} активирован из списка травмированных"),
 
+    # will be activated from LTIR
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?will be activated from (?:long-term\s+)?(?:injured reserve|LTIR)\b', re.I),
+     lambda m: f"{m.group(1)} будет активирован из долгосрочного списка травмированных"),
+
     # Placed on LTIR
-    (re.compile(r'(\w+)\s+(?:has been |was )?placed on (?:the\s+)?LTIR\b', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?LTIR\b', re.I),
      lambda m: f"{m.group(1)} переведён в долгосрочный список травмированных (LTIR)"),
 
     # Activated from LTIR
-    (re.compile(r'(\w+)\s+(?:has been |was )?activated from (?:the\s+)?LTIR\b', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?LTIR\b', re.I),
      lambda m: f"{m.group(1)} активирован из долгосрочного списка травмированных (LTIR)"),
 
-    # Assigned to AHL (alternate phrasing)
-    (re.compile(r'(\w+)\s+(?:has been |was )?assigned to (?:the\s+)?AHL\b', re.I),
-     lambda m: f"{m.group(1)} направлен в АХЛ"),
+    # Suspended for N game(s)
+    (re.compile(r'(\w+)\s+was suspended for (\w[\w\s\-]+?games?)\b', re.I),
+     lambda m: f"{m.group(1)} дисквалифицирован на {m.group(2).strip()}"),
 
-    # Loaned to
-    (re.compile(r'(\w+)\s+(?:has been |was )?loaned to (.+?)(?:\.|$)', re.I),
-     lambda m: f"{m.group(1)} отдан в аренду ({m.group(2).strip()})"),
+    # is eligible to play / has served suspension
+    (re.compile(r'(\w+)\s+is eligible to play', re.I),
+     lambda m: f"{m.group(1)} вернулся после дисквалификации"),
 
-    # Claimed on waivers
-    (re.compile(r'(\w+)\s+(?:has been |was )?claimed (?:off waivers\s+)?by (?:the\s+)?(.+?)(?:\.|$)', re.I),
+    # Claimed off waivers by
+    (re.compile(r'(\w+)\s+(?:has been |was )?claimed (?:off waivers\s+)?by (?:the\s+)?(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
      lambda m: f"{m.group(1)} подобран с драфта отказов командой {m.group(2).strip()}"),
 
     # Cleared waivers
@@ -134,45 +167,97 @@ TRANSACTION_PATTERNS = [
     (re.compile(r'(\w+)\s+(?:has been |was )?released\b', re.I),
      lambda m: f"{m.group(1)} освобождён"),
 
-    # Retired / ending career
-    (re.compile(r'(\w+)\s+(?:announced|is)\s+.{0,30}(?:retiring|retirement|ending his playing career)', re.I),
+    # Retiring / ending career
+    (re.compile(r'(\w+)\s+(?:announced|is)\s+.{0,40}(?:retiring|retirement|ending his playing career)', re.I),
      lambda m: f"{m.group(1)} завершает карьеру"),
 
-    # Signed to PTO
+    # Loaned to
+    (re.compile(r'(\w+)\s+(?:has been |was )?loaned to (.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
+     lambda m: f"{m.group(1)} отдан в аренду ({m.group(2).strip()})"),
+
+    # Signed PTO
     (re.compile(r'(\w+)\s+(?:has been |was )?signed (?:to\s+)?(?:a\s+)?PTO\b', re.I),
      lambda m: f"{m.group(1)} подписан на пробный контракт (PTO)"),
 
-    # Agreed to terms / signed contract with foreign club
-    (re.compile(r'(\w+)\s+agreed to terms on (?:a\s+)?contract with (.+?)(?:\.|,|$)', re.I),
+    # Agreed to terms with foreign club
+    (re.compile(r'(\w+)\s+agreed to terms on (?:a\s+)?contract with (.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
      lambda m: f"{m.group(1)} подписал контракт с {m.group(2).strip()}"),
+
+    # Committed to university/college
+    (re.compile(r'(\w+)\s+committed to (?:the\s+)?(.+?)(?:\s+ahead of|\s+for the|\s+on\s+\w+day|\s*\.)', re.I),
+     lambda m: f"{m.group(1)} переходит в студенческую команду {m.group(2).strip()}"),
+
+    # Assigned to AHL (general)
+    (re.compile(r'(\w+)\s+(?:has been |was )?assigned to (?:the\s+)?AHL\b', re.I),
+     lambda m: f"{m.group(1)} направлен в АХЛ"),
 ]
 
-NAV_LINKS_COUNT = 64
-CACHE_FILE = "last_data_cache.json"
-INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
-INJURIES_MIN_COUNT = 50
+def get_team_abbr_from_ids(team_ids):
+    """Получает аббревиатуру команды из списка числовых ID."""
+    if not team_ids:
+        return ""
+    for tid in team_ids:
+        try:
+            abbr = TEAM_ID_MAPPING.get(int(tid))
+            if abbr:
+                return f"({abbr})"
+        except (ValueError, TypeError):
+            continue
+    return ""
 
-SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
-TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
-TRANSACTIONS_API = "https://puckpedia.com/data/api_transactions?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_transactions%22%2C%22url%22%3A%22transactions%22%2C%22transaction_type%22%3A%22roster%22%2C%22defaultSort%22%3A%22sort_date%22%2C%22sortBy%22%3A%22sort_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
-
-# =============================================================================
-# ПЕРЕВОД ТРАНЗАКЦИЙ ПО ШАБЛОНАМ
-# =============================================================================
-
-def translate_transaction(raw_text):
-    """Переводит текст транзакции по шаблонам. Если шаблон не найден — возвращает оригинал."""
-    # Убираем HTML-теги
+def translate_transaction(raw_text, team_abbr=""):
+    """Переводит текст транзакции по шаблонам."""
     text = re.sub(r'<[^>]+>', '', raw_text).strip()
     for pattern, formatter in TRANSACTION_PATTERNS:
         m = pattern.search(text)
         if m:
             try:
-                return formatter(m)
+                result = formatter(m)
+                # Добавляем аббревиатуру команды если есть и её ещё нет в строке
+                if team_abbr and team_abbr not in result:
+                    result = f"{result} {team_abbr}"
+                return result
             except Exception:
                 continue
-    # Шаблон не подошёл — возвращаем оригинал без тегов
+    # Шаблон не подошёл — оригинал без тегов + аббревиатура если есть
+    if team_abbr:
+        return f"{text} {team_abbr}"
     return text
+
+# =============================================================================
+# КЭش ТРАНЗАКЦИЙ (отдельный файл)
+# =============================================================================
+
+def load_transactions_cache():
+    """
+    Структура:
+    {
+        "last_date": "2026-06-12",
+        "last_id": "12345",
+        "recent": ["строка1", "строка2", ...]  // последние 5 для отладки
+    }
+    """
+    default = {"last_date": "", "last_id": "", "recent": []}
+    if not os.path.exists(TRANSACTIONS_CACHE_FILE):
+        return default
+    try:
+        with open(TRANSACTIONS_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return default
+        if "last_date" not in data:
+            data["last_date"] = ""
+        if "last_id" not in data:
+            data["last_id"] = ""
+        if "recent" not in data:
+            data["recent"] = []
+        return data
+    except Exception:
+        return default
+
+def save_transactions_cache(cache):
+    with open(TRANSACTIONS_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
 
 # =============================================================================
 # СНАПШОТ ТРАВМ
@@ -202,19 +287,18 @@ def commit_file(filepath, message):
             if status.stdout.strip():
                 subprocess.run(["git", "commit", "-m", f"{message} [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
-                print(f"  {filepath} сохранён в репозиторий.")
+                print(f"  {filepath} сохранён.")
         except Exception as e:
             print(f"  Ошибка сохранения {filepath}: {e}")
 
 # =============================================================================
-# КЭШ
+# ОСНОВНОЙ КЭШ
 # =============================================================================
 
 def load_cache():
     default = {
         "signings": {"last_date": "", "last_id": ""},
         "trades": {"last_date": "", "last_id": ""},
-        "transactions": {"last_date": "", "last_id": ""},
         "waivers": {"seen": []}
     }
     if not os.path.exists(CACHE_FILE):
@@ -225,18 +309,18 @@ def load_cache():
     except Exception:
         return default
 
-    # Миграция старых форматов
-    for key in ("signings", "trades", "transactions"):
+    for key in ("signings", "trades"):
         if not isinstance(data.get(key), dict):
             data[key] = {"last_date": "", "last_id": ""}
-    if "transactions" not in data:
-        data["transactions"] = {"last_date": "", "last_id": ""}
     data.pop("injuries", None)
+    data.pop("transactions", None)
     if not isinstance(data.get("waivers"), dict):
         data["waivers"] = {"seen": []}
     elif "seen" not in data["waivers"]:
         data["waivers"]["seen"] = []
-
+    for k, v in default.items():
+        if k not in data:
+            data[k] = v
     return data
 
 def save_cache(cache):
@@ -253,9 +337,9 @@ def commit_cache():
             if status.stdout.strip():
                 subprocess.run(["git", "commit", "-m", "Обновление кэша [skip ci]"], check=True)
                 subprocess.run(["git", "push"], check=True)
-                print("Кэш сохранён в репозиторий.")
+                print("Кэш сохранён.")
         except Exception as e:
-            print(f"Ошибка сохранения кэша: {e}")
+            print(f"Ошибка кэша: {e}")
 
 # =============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -330,11 +414,11 @@ def translate_trade(text):
         match = re.search(pattern, text)
         if match:
             team1, p1, team2, p2 = match.groups()
-            rus_team1_data = get_rus_team_data(team1)
-            rus_team2_data = get_rus_team_data(team2)
+            r1 = get_rus_team_data(team1)
+            r2 = get_rus_team_data(team2)
             p1 = p1.replace(".", "").replace(" and ", " и ")
             p2 = p2.replace(".", "").replace(" and ", " и ")
-            return f"{rus_team1_data['main']} {p2} на {p1} {rus_team2_data['from']}"
+            return f"{r1['main']} {p2} на {p1} {r2['from']}"
     return text
 
 def translate_injury(raw):
@@ -384,13 +468,13 @@ async def fetch_api(page, url, label):
                 print(f"  Получено записей: {len(result)}")
                 return result
             elif status == 403:
-                print(f"  403 Cloudflare — ждём 10 сек...")
+                print(f"  403 — ждём 10 сек...")
                 await asyncio.sleep(10)
             else:
-                print(f"  Статус {status}, ждём 5 сек...")
+                print(f"  Статус {status} — ждём 5 сек...")
                 await asyncio.sleep(5)
         except Exception as e:
-            print(f"  Ошибка: {e}, ждём 5 сек...")
+            print(f"  Ошибка: {e} — ждём 5 сек...")
             await asyncio.sleep(5)
     return []
 
@@ -418,6 +502,9 @@ async def main():
     current_injury_urls = {}
     current_injuries_top = []
     injuries_loaded_ok = False
+    prev_snapshot = {}
+    prev_names = set()
+    recovered_lines = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -438,7 +525,7 @@ async def main():
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
-        # --- ТРАНЗАКЦИИ (MOVES) ---
+        # --- ТРАНЗАКЦИИ ---
         print("Открываем страницу транзакций...")
         await page.goto("https://puckpedia.com/transactions?transaction_type=roster", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
@@ -486,12 +573,12 @@ async def main():
             for name, reason, player_url in raw_injury_entries:
                 team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
                 current_injuries_top.append((name, team_abbr, reason, player_url))
-                print(f"  Топ-3: ❌ {name} ({team_abbr}), {reason}")
+                print(f"  Топ-3: {name} ({team_abbr}), {reason}")
 
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
             recovered = prev_names - current_injury_names_all
-            recovered_lines = []
+
             if recovered and len(prev_names) > 0:
                 print(f"  Выздоровевших: {len(recovered)}")
                 for name in sorted(recovered):
@@ -507,7 +594,6 @@ async def main():
             print(f"  ЗАЩИТА: список травм мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок пропускается.")
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
-            recovered_lines = []
 
         # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
@@ -620,9 +706,11 @@ async def main():
         cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
         cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
-    # --- ТРАНЗАКЦИИ (MOVES) ---
-    last_tx_date = cache["transactions"].get("last_date", "")
-    last_tx_id = cache["transactions"].get("last_id", "")
+    # --- ТРАНЗАКЦИИ ---
+    tx_cache = load_transactions_cache()
+    last_tx_date = tx_cache.get("last_date", "")
+    last_tx_id = tx_cache.get("last_id", "")
+
     new_transactions_raw = []
     for item in raw_transactions:
         item_date = str(item.get("sort_date", "") or item.get("transaction_date", "") or "")
@@ -635,20 +723,32 @@ async def main():
             break
 
     print(f"Новых транзакций: {len(new_transactions_raw)}")
+    new_tx_lines = []
     seen_tx = set()
     for item in new_transactions_raw:
         raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
         if not raw_text or len(raw_text) < 10:
             continue
-        translated = translate_transaction(raw_text)
+        # Получаем аббревиатуру команды из числовых ID
+        team_ids = item.get("team_ids", [])
+        team_abbr = get_team_abbr_from_ids(team_ids)
+        translated = translate_transaction(raw_text, team_abbr)
         if translated not in seen_tx:
             seen_tx.add(translated)
-            all_new.append(f"🏒 {translated}")
+            line = f"🏒 {translated}"
+            all_new.append(line)
+            new_tx_lines.append(translated)
 
+    # Обновляем кэш транзакций
     if raw_transactions:
         first = raw_transactions[0]
-        cache["transactions"]["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
-        cache["transactions"]["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
+        tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
+        tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
+    # Храним последние 5 строк для отладки
+    existing_recent = tx_cache.get("recent", [])
+    tx_cache["recent"] = (new_tx_lines + existing_recent)[:5]
+    save_transactions_cache(tx_cache)
+    commit_file(TRANSACTIONS_CACHE_FILE, "Обновление кэша транзакций")
 
     # --- ТРАВМЫ ---
     if injuries_loaded_ok:
