@@ -120,7 +120,7 @@ AHL_TEAM_MAPPING = {
     'calgary wranglers': 'CGY',
     'wranglers': 'CGY',
     'tucson': 'UTAH',
-    'wilkes': 'NYR',
+    'wilkes': 'PIT',
     'lehigh': 'PHI',
     'new jersey': 'NJD',
     'pittsburgh': 'PIT',
@@ -248,7 +248,6 @@ TRANSACTION_PATTERNS = [
 
 def build_transaction_line(parsed):
     name, action, arg = parsed
-
     if action == 'ahl_to':
         ahl_abbr = get_ahl_nhl_abbr(arg)
         abbr_str = f" ({ahl_abbr})" if ahl_abbr else ""
@@ -788,6 +787,15 @@ async def main():
     last_tx_date = tx_cache.get("last_date", "")
     last_tx_id = tx_cache.get("last_id", "")
 
+    # recent всегда перезаписываем из топ-5 API с актуальным переводом
+    all_tx_lines_for_recent = []
+    for item in raw_transactions[:5]:
+        raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
+        if raw_text and len(raw_text) >= 10:
+            all_tx_lines_for_recent.append(translate_transaction(raw_text))
+    tx_cache["recent"] = all_tx_lines_for_recent
+    print(f"  recent обновлён: {all_tx_lines_for_recent}")
+
     new_transactions_raw = []
     for item in raw_transactions:
         item_date = str(item.get("sort_date", "") or item.get("transaction_date", "") or "")
@@ -800,7 +808,6 @@ async def main():
             break
 
     print(f"Новых транзакций: {len(new_transactions_raw)}")
-    new_tx_lines = []
     seen_tx = set()
     for item in new_transactions_raw:
         raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
@@ -809,18 +816,13 @@ async def main():
         translated = translate_transaction(raw_text)
         if translated not in seen_tx:
             seen_tx.add(translated)
-            line = f"🏒 {translated}"
-            all_new.append(line)
-            new_tx_lines.append(translated)
+            all_new.append(f"🏒 {translated}")
 
-    # Обновляем кэш транзакций — recent перезаписываем новыми строками
     if raw_transactions:
         first = raw_transactions[0]
         tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
         tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
-    if new_tx_lines:
-        existing_recent = tx_cache.get("recent", [])
-        tx_cache["recent"] = (new_tx_lines + existing_recent)[:5]
+
     save_transactions_cache(tx_cache)
     commit_file(TRANSACTIONS_CACHE_FILE, "Обновление кэша транзакций")
 
