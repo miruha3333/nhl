@@ -163,7 +163,7 @@ TRANSACTION_PATTERNS = [
      lambda m: (m.group(1), 'summoned_by', m.group(3).strip())),
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?injured reserve|IR\b', re.I),
      lambda m: (m.group(1), 'placed_ir', '')),
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?long-term\s+)?(?:injured reserve|IR\b)', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?(?:long-term\s+)?(?:injured reserve|IR\b)', re.I),
      lambda m: (m.group(1), 'activated_ir', '')),
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?will be activated from (?:long-term\s+)?(?:injured reserve|LTIR)\b', re.I),
      lambda m: (m.group(1), 'will_activated_ltir', '')),
