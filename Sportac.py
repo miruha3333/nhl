@@ -56,7 +56,7 @@ RUS_TEAM_MAPPING = {
     'Chicago Blackhawks': {'main': 'Чикаго обменяло', 'from': 'из Чикаго'},
     'Anaheim Ducks': {'main': 'Анахайм обменял', 'from': 'из Анахайма'},
     'Colorado Avalanche': {'main': 'Колорадо обменяло', 'from': 'из Колорадо'},
-    'Calgary Flames': {'main': 'Калгари обменяли', 'from': 'из Калгари'},
+    'Calgary Flames': {'main': 'Калгари обменяли', 'from': 'из Калкари'},
     'Dallas Stars': {'main': 'Даллас обменял', 'from': 'из Далласа'},
     'Edmonton Oilers': {'main': 'Эдмонтон обменял', 'from': 'из Эдмонтона'},
     'Minnesota Wild': {'main': 'Миннесота обменяла', 'from': 'из Миннесоты'},
@@ -86,45 +86,14 @@ INJURY_MAPPING = {
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
 AHL_TEAM_MAPPING = {
-    'chicago': 'CAR',
-    'colorado': 'COL',
-    'henderson': 'VGK',
-    'laval': 'MTL',
-    'springfield': 'STL',
-    'toronto': 'TOR',
-    'belleville': 'OTT',
-    'utica': 'VAN',
-    'san jose': 'SJS',
-    'san diego': 'ANA',
-    'bakersfield': 'EDM',
-    'abbotsford': 'VAN',
-    'iowa': 'MIN',
-    'milwaukee': 'NAS',
-    'cleveland': 'CBJ',
-    'grand rapids': 'DET',
-    'charlotte': 'FLA',
-    'hershey': 'WSH',
-    'lehigh valley': 'PHI',
-    'hartford': 'NYR',
-    'bridgeport': 'NYI',
-    'binghamton': 'NJD',
-    'rockford': 'CHI',
-    'texas': 'DAL',
-    'coachella': 'SEA',
-    'providence': 'BOS',
-    'rochester': 'BUF',
-    'syracuse': 'TBL',
-    'manitoba': 'WPG',
-    'ontario': 'LAK',
-    'stockton': 'CGY',
-    'calgary wranglers': 'CGY',
-    'wranglers': 'CGY',
-    'tucson': 'UTAH',
-    'wilkes': 'PIT',
-    'lehigh': 'PHI',
-    'new jersey': 'NJD',
-    'pittsburgh': 'PIT',
-    'seattle': 'SEA',
+    'chicago': 'CAR', 'colorado': 'COL', 'henderson': 'VGK', 'laval': 'MTL', 'springfield': 'STL',
+    'toronto': 'TOR', 'belleville': 'OTT', 'utica': 'VAN', 'san jose': 'SJS', 'san diego': 'ANA',
+    'bakersfield': 'EDM', 'abbotsford': 'VAN', 'iowa': 'MIN', 'milwaukee': 'NAS', 'cleveland': 'CBJ',
+    'grand rapids': 'DET', 'charlotte': 'FLA', 'hershey': 'WSH', 'lehigh valley': 'PHI', 'hartford': 'NYR',
+    'bridgeport': 'NYI', 'binghamton': 'NJD', 'rockford': 'CHI', 'texas': 'DAL', 'coachella': 'SEA',
+    'providence': 'BOS', 'rochester': 'BUF', 'syracuse': 'TBL', 'manitoba': 'WPG', 'ontario': 'LAK',
+    'stockton': 'CGY', 'calgary wranglers': 'CGY', 'wranglers': 'CGY', 'tucson': 'UTAH', 'wilkes': 'PIT',
+    'lehigh': 'PHI', 'new jersey': 'NJD', 'pittsburgh': 'PIT', 'seattle': 'SEA',
 }
 
 GAMES_WORD_MAP = {
@@ -186,61 +155,42 @@ def clean_league_prefix(text):
 TRANSACTION_PATTERNS = [
     (re.compile(r'(\w+)\s+was (?:reassigned|sent) to AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
      lambda m: (m.group(1), 'ahl_to', m.group(2).strip())),
-
     (re.compile(r'(\w+)\s+was (?:recalled|promoted|called up|brought up|summoned|elevated)\s+from AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
      lambda m: (m.group(1), 'ahl_from', m.group(2).strip())),
-
     (re.compile(r'(\w+)\s+was elevated from the minors', re.I),
      lambda m: (m.group(1), 'minors_from', '')),
-
     (re.compile(r'(\w+)\s+was summoned by (?:the\s+)?(.+?) from (?:OHL|WHL|QMJHL|AHL|ECHL)\s+(\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
      lambda m: (m.group(1), 'summoned_by', m.group(3).strip())),
-
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?(?:injured reserve|IR)\b', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?injured reserve|IR\b', re.I),
      lambda m: (m.group(1), 'placed_ir', '')),
-
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?(?:long-term\s+)?(?:injured reserve|IR)\b', re.I),
+    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?long-term\s+)?(?:injured reserve|IR\b)', re.I),
      lambda m: (m.group(1), 'activated_ir', '')),
-
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?will be activated from (?:long-term\s+)?(?:injured reserve|LTIR)\b', re.I),
      lambda m: (m.group(1), 'will_activated_ltir', '')),
-
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?LTIR\b', re.I),
      lambda m: (m.group(1), 'placed_ltir', '')),
-
     (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?LTIR\b', re.I),
      lambda m: (m.group(1), 'activated_ltir', '')),
-
     (re.compile(r'(\w+)\s+was suspended for ([\w\s]+?games?)\b', re.I),
      lambda m: (m.group(1), 'suspended', normalize_games(m.group(2).strip()))),
-
     (re.compile(r'(\w+)\s+is eligible to play', re.I),
      lambda m: (m.group(1), 'eligible', '')),
-
     (re.compile(r'(\w+)\s+(?:has been |was )?claimed (?:off waivers\s+)?by (?:the\s+)?(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
      lambda m: (m.group(1), 'claimed', m.group(2).strip())),
-
     (re.compile(r'(\w+)\s+(?:has\s+)?cleared waivers', re.I),
      lambda m: (m.group(1), 'cleared_waivers', '')),
-
     (re.compile(r'(\w+)\s+(?:has been |was )?released\b', re.I),
      lambda m: (m.group(1), 'released', '')),
-
     (re.compile(r'(\w+)\s+(?:announced|is)\s+.{0,40}(?:retiring|retirement|ending his playing career)', re.I),
      lambda m: (m.group(1), 'retiring', '')),
-
     (re.compile(r'(\w+)\s+(?:has been |was )?loaned to (.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
      lambda m: (m.group(1), 'loaned', clean_league_prefix(m.group(2).strip()))),
-
     (re.compile(r'(\w+)\s+(?:has been |was )?signed (?:to\s+)?(?:a\s+)?PTO\b', re.I),
      lambda m: (m.group(1), 'pto', '')),
-
     (re.compile(r'(\w+)\s+(?:agreed to terms on (?:a\s+)?contract with|signed (?:a\s+)?contract with)\s+(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
      lambda m: (m.group(1), 'foreign_contract', clean_league_prefix(m.group(2).strip()))),
-
     (re.compile(r'(\w+)\s+committed to (?:the\s+)?(.+?)(?:\s+ahead of|\s+for the|\s+on\s+\w+day|\s*\.)', re.I),
      lambda m: (m.group(1), 'committed', m.group(2).strip())),
-
     (re.compile(r'(\w+)\s+(?:has been |was )?assigned to (?:the\s+)?AHL\b', re.I),
      lambda m: (m.group(1), 'assigned_ahl', '')),
 ]
@@ -489,6 +439,11 @@ def translate_trade(text):
             team1, p1, team2, p2 = match.groups()
             r1 = get_rus_team_data(team1)
             r2 = get_rus_team_data(team2)
+            
+            # Очищаем списки обмениваемых активов от английских артиклей "a " и "an " перед пиками/игроками
+            p1 = re.sub(r'\b[aA](n)?\s+', '', p1)
+            p2 = re.sub(r'\b[aA](n)?\s+', '', p2)
+            
             p1 = p1.replace(".", "").replace(" and ", " и ")
             p2 = p2.replace(".", "").replace(" and ", " и ")
             return f"{r1['main']} {p2} на {p1} {r2['from']}"
@@ -787,7 +742,6 @@ async def main():
     last_tx_date = tx_cache.get("last_date", "")
     last_tx_id = tx_cache.get("last_id", "")
 
-    # recent всегда перезаписываем из топ-5 API с актуальным переводом
     all_tx_lines_for_recent = []
     for item in raw_transactions[:5]:
         raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
