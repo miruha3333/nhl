@@ -1,11 +1,11 @@
 {
   "signings": {
-    "last_date": "2026-06-20",
-    "last_id": "10416"
+    "last_date": "2026-06-21",
+    "last_id": "10417"
   },
   "trades": {
-    "last_date": "2026-06-19",
-    "last_id": "1129"
+    "last_date": "2026-06-21",
+    "last_id": "1130"
   },
   "waivers": {
     "current": [
@@ -14,9 +14,9 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Jack Ahcan",
       "Lukas Reichel",
-      "Michael Pezzetta"
+      "Michael Pezzetta",
+      "Jack Ahcan"
     ]
   }
 }
