@@ -1,7 +1,7 @@
 {
   "signings": {
     "last_date": "2026-06-21",
-    "last_id": "10417"
+    "last_id": "10418"
   },
   "trades": {
     "last_date": "2026-06-21",
@@ -15,8 +15,8 @@
     ],
     "seen": [
       "Lukas Reichel",
-      "Michael Pezzetta",
-      "Jack Ahcan"
+      "Jack Ahcan",
+      "Michael Pezzetta"
     ]
   }
 }
