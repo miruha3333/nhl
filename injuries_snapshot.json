@@ -1,113 +1,308 @@
 {
-  "Matt Rempe": {
+  "Jake Bean": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/matt-rempe"
-  },
-  "Jordan Kyrou": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jordan-kyrou"
-  },
-  "Brendan Smith": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/brendan-smith"
-  },
-  "Matt Grzelcyk": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/matt-grzelcyk"
-  },
-  "Filip Hallander": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/filip-hallander"
-  },
-  "Eriks Mateiko": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/eriks-mateiko"
-  },
-  "Arttu Hyry": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/arttu-hyry"
-  },
-  "Matt Murray": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/matt-murray"
-  },
-  "Owen Tippett": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/owen-tippett"
-  },
-  "Artyom Zub": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/artyom-zub"
-  },
-  "Filip Chytil": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/filip-chytil"
-  },
-  "Pierre-Luc Dubois": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/pierre-luc-dubois"
-  },
-  "Roope Hintz": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/roope-hintz"
-  },
-  "Nikita Grebenkin": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nikita-grebyonkin"
-  },
-  "Filip Gustavsson": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/filip-gustavsson"
+    "url": "/player/jake-bean"
   },
   "Elias Salomonsson": {
     "team": "UNK",
     "reason": "",
     "url": "/player/elias-salomonsson"
   },
-  "Ridly Greig": {
+  "Alex Pietrangelo": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/ridly-greig"
+    "url": "/player/alex-pietrangelo"
+  },
+  "Morgan Barron": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/morgan-barron"
+  },
+  "Tyler Seguin": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/tyler-seguin"
+  },
+  "Dmitry Kulikov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/dmitry-kulikov"
+  },
+  "Jonathan Marchessault": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jonathan-marchessault"
+  },
+  "Kyle Palmieri": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/kyle-palmieri"
+  },
+  "Arttu Hyry": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/arttu-hyry"
+  },
+  "Calle Jarnkrok": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/calle-jarnkrok"
+  },
+  "Brad Marchand": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/brad-marchand"
+  },
+  "Owen Tippett": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/owen-tippett"
+  },
+  "Noah Östlund": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/noah-stlund"
+  },
+  "Maxim Shabanov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/maxim-shabanov"
+  },
+  "Yan Kuznetsov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/yan-kuznetsov"
+  },
+  "Matt Grzelcyk": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/matt-grzelcyk"
   },
   "Niko Mikkola": {
     "team": "UNK",
     "reason": "",
     "url": "/player/niko-mikkola"
   },
-  "Artyom Levshunov": {
+  "Gustav Forsling": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/artyom-levshunov"
+    "url": "/player/gustav-forsling"
+  },
+  "Mattias Janmark": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/mattias-janmark"
+  },
+  "Noah Cates": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/noah-cates"
+  },
+  "Jake Sanderson": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jake-sanderson"
+  },
+  "Filip Hallander": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/filip-hallander"
+  },
+  "Justin Danforth": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/justin-danforth"
+  },
+  "Brett Pesce": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/brett-pesce"
+  },
+  "Troy Terry": {
+    "team": "ANA",
+    "reason": "травма бедра",
+    "url": "/player/troy-terry"
+  },
+  "Artyom Zub": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/artyom-zub"
   },
   "Rasmus Sandin": {
     "team": "UNK",
     "reason": "",
     "url": "/player/rasmus-sandin"
   },
-  "Uvis Balinskis": {
+  "Torey Krug": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/uvis-balinskis"
+    "url": "/player/torey-krug"
   },
-  "Gustav Forsling": {
+  "Adam Henrique": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/gustav-forsling"
+    "url": "/player/adam-henrique"
+  },
+  "Jonathan Huberdeau": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jonathan-huberdeau"
+  },
+  "Ryan Ellis": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ryan-ellis"
+  },
+  "Jaden Schwartz": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jaden-schwartz"
+  },
+  "Kevin Bahl": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/kevin-bahl"
+  },
+  "Jacob Markstrom": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jacob-markstrom"
+  },
+  "William Karlsson": {
+    "team": "VGK",
+    "reason": "травма запястья",
+    "url": "/player/william-karlsson"
+  },
+  "Kevin Fiala": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/kevin-fiala"
+  },
+  "Charlie Lindgren": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/charlie-lindgren"
+  },
+  "Artyom Levshunov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/artyom-levshunov"
+  },
+  "Pierre Engvall": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/pierre-engvall"
+  },
+  "Seth Jones": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/seth-jones"
+  },
+  "Nikita Zadorov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/nikita-zadorov"
+  },
+  "Nikita Grebenkin": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/nikita-grebyonkin"
+  },
+  "Pontus Holmberg": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/pontus-holmberg"
+  },
+  "Connor Zary": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/connor-zary"
+  },
+  "Rodrigo Abols": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/rodrigo-abols"
+  },
+  "Thatcher Demko": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/thatcher-demko"
+  },
+  "Jiri Kulich": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jiri-kulich"
+  },
+  "Jared McCann": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jared-mccann"
+  },
+  "Samuel Honzek": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/samuel-honzek"
+  },
+  "Zack MacEwen": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/zack-macewen"
+  },
+  "Ryan Poehling": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ryan-poehling"
+  },
+  "Drew Helleson": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/drew-helleson"
+  },
+  "Dakota Joshua": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/dakota-joshua"
+  },
+  "Aaron Ekblad": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/aaron-ekblad"
+  },
+  "Eriks Mateiko": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/eriks-mateiko"
+  },
+  "Christopher Tanev": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/christopher-tanev"
+  },
+  "Ty Murchison": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ty-murchison"
+  },
+  "Charlie McAvoy": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/charlie-mcavoy"
+  },
+  "Nicolas Hague": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/nicolas-hague"
+  },
+  "Carter Verhaeghe": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/carter-verhaeghe"
+  },
+  "Damon Severson": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/damon-severson"
   },
   "Dans Locmelis": {
     "team": "UNK",
@@ -119,479 +314,284 @@
     "reason": "",
     "url": "/player/andrew-mangiapane"
   },
-  "William Karlsson": {
-    "team": "VGK",
-    "reason": "травма запястья",
-    "url": "/player/william-karlsson"
-  },
-  "Jared McCann": {
+  "Filip Chytil": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/jared-mccann"
-  },
-  "Alex Pietrangelo": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/alex-pietrangelo"
-  },
-  "Jiri Kulich": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jiri-kulich"
-  },
-  "Charlie McAvoy": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/charlie-mcavoy"
-  },
-  "Dmitry Kulikov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/dmitry-kulikov"
-  },
-  "Stefan Noesen": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/stefan-noesen"
-  },
-  "Jonas Brodin": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonas-brodin"
-  },
-  "Jacob Markstrom": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jacob-markstrom"
-  },
-  "Evander Kane": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/evander-kane"
-  },
-  "Charlie Lindgren": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/charlie-lindgren"
-  },
-  "Aaron Ekblad": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/aaron-ekblad"
-  },
-  "Jonathan Lekkerimaki": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonathan-lekkerimaki"
-  },
-  "Nikita Chibrikov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nikita-chibrikov"
-  },
-  "Derek Forbort": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/derek-forbort"
-  },
-  "Torey Krug": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/torey-krug"
-  },
-  "Kevin Fiala": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/kevin-fiala"
-  },
-  "Luke Hughes": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/luke-hughes"
-  },
-  "Nils Hoglander": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nils-hoglander"
-  },
-  "Pierre Engvall": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/pierre-engvall"
-  },
-  "Alex Iafallo": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/alex-iafallo"
-  },
-  "Noah Östlund": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/noah-stlund"
-  },
-  "Ryan Reaves": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/ryan-reaves"
-  },
-  "Neal Pionk": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/neal-pionk"
-  },
-  "Jonah Gadjovich": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonah-gadjovich"
-  },
-  "Valeri Nichushkin": {
-    "team": "COL",
-    "reason": "травма нижней части тела",
-    "url": "/player/valeri-nichushkin"
-  },
-  "Vladislav Namestnikov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/vladislav-namestnikov"
-  },
-  "Jonas Siegenthaler": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonas-siegenthaler"
-  },
-  "Nicolas Hague": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nicolas-hague"
-  },
-  "Drew Helleson": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/drew-helleson"
-  },
-  "Max Jones": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/max-jones"
-  },
-  "Pontus Holmberg": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/pontus-holmberg"
-  },
-  "Semyon Varlamov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/semyon-varlamov"
-  },
-  "Charlie Stramel": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/charlie-stramel"
-  },
-  "Brad Marchand": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/brad-marchand"
+    "url": "/player/filip-chytil"
   },
   "Radko Gudas": {
     "team": "UNK",
     "reason": "",
     "url": "/player/radko-gudas"
   },
-  "Zach Bogosian": {
+  "Ryan Reaves": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/zach-bogosian"
+    "url": "/player/ryan-reaves"
   },
-  "Mattias Janmark": {
+  "Nils Hoglander": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/mattias-janmark"
+    "url": "/player/nils-hoglander"
   },
-  "Yan Kuznetsov": {
+  "Jonas Siegenthaler": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/yan-kuznetsov"
+    "url": "/player/jonas-siegenthaler"
   },
-  "Damon Severson": {
+  "Luke Hughes": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/damon-severson"
+    "url": "/player/luke-hughes"
   },
-  "Tomas Nosek": {
+  "Vladislav Namestnikov": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/tomas-nosek"
-  },
-  "Joel Hanley": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/joel-hanley"
-  },
-  "Sam Bennett": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/sam-bennett"
+    "url": "/player/vladislav-namestnikov"
   },
   "Sam Reinhart": {
     "team": "UNK",
     "reason": "",
     "url": "/player/sam-reinhart"
   },
-  "Kyle Palmieri": {
+  "Alex Iafallo": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/kyle-palmieri"
-  },
-  "Ryan Ellis": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/ryan-ellis"
-  },
-  "Nikita Zadorov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nikita-zadorov"
-  },
-  "Evan Rodrigues": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/evan-rodrigues"
-  },
-  "Dakota Joshua": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/dakota-joshua"
-  },
-  "Mathew Barzal": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/mathew-barzal"
-  },
-  "Tyler Seguin": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/tyler-seguin"
-  },
-  "Jake Sanderson": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jake-sanderson"
-  },
-  "Zack MacEwen": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/zack-macewen"
-  },
-  "Thatcher Demko": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/thatcher-demko"
-  },
-  "Rodrigo Abols": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/rodrigo-abols"
-  },
-  "Kevin Bahl": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/kevin-bahl"
-  },
-  "Auston Matthews": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/auston-matthews"
-  },
-  "Morgan Barron": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/morgan-barron"
-  },
-  "Dmitri Voronkov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/dimitri-voronkov"
-  },
-  "Connor Zary": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/connor-zary"
-  },
-  "Troy Terry": {
-    "team": "ANA",
-    "reason": "травма бедра",
-    "url": "/player/troy-terry"
-  },
-  "Joel Eriksson Ek": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/joel-erikssonek"
-  },
-  "Jake Bean": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jake-bean"
-  },
-  "Alexander Romanov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/alexander-romanov"
-  },
-  "Brandon Carlo": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/brandon-carlo"
-  },
-  "Adam Henrique": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/adam-henrique"
+    "url": "/player/alex-iafallo"
   },
   "Henry Mews": {
     "team": "UNK",
     "reason": "",
     "url": "/player/henry-mews"
   },
-  "Justin Danforth": {
+  "Nikita Chibrikov": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/justin-danforth"
-  },
-  "Christopher Tanev": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/christopher-tanev"
-  },
-  "Nils Lundkvist": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nils-lundkvist"
-  },
-  "Barrett Hayton": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/barrett-hayton"
+    "url": "/player/nikita-chibrikov"
   },
   "Michael Rasmussen": {
     "team": "UNK",
     "reason": "",
     "url": "/player/michael-rasmussen"
   },
-  "Caleb Jones": {
+  "Roope Hintz": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/caleb-jones"
-  },
-  "Max Domi": {
-    "team": "TOR",
-    "reason": "травма спины",
-    "url": "/player/max-domi"
-  },
-  "Maxim Shabanov": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/maxim-shabanov"
-  },
-  "Samuel Honzek": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/samuel-honzek"
-  },
-  "Nick Jensen": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/nick-jensen"
-  },
-  "Viktor Arvidsson": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/viktor-arvidsson"
-  },
-  "Noah Cates": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/noah-cates"
-  },
-  "Ryan Pulock": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/ryan-pulock"
-  },
-  "Petr Mrazek": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/petr-mrazek"
-  },
-  "Jonathan Marchessault": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonathan-marchessault"
-  },
-  "Calle Jarnkrok": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/calle-jarnkrok"
-  },
-  "Ryan Poehling": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/ryan-poehling"
-  },
-  "Brett Pesce": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/brett-pesce"
-  },
-  "Carter Verhaeghe": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/carter-verhaeghe"
-  },
-  "Gustav Nyquist": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/gustav-nyquist"
-  },
-  "Jonathan Huberdeau": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonathan-huberdeau"
-  },
-  "Seth Jones": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/seth-jones"
-  },
-  "Logan Couture": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/logan-couture"
-  },
-  "Mason Appleton": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/mason-appleton"
+    "url": "/player/roope-hintz"
   },
   "Anthony Stolarz": {
     "team": "UNK",
     "reason": "",
     "url": "/player/anthony-stolarz"
   },
-  "Jaden Schwartz": {
+  "Jonathan Lekkerimaki": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/jaden-schwartz"
+    "url": "/player/jonathan-lekkerimaki"
   },
-  "Ty Murchison": {
+  "Uvis Balinskis": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/ty-murchison"
+    "url": "/player/uvis-balinskis"
+  },
+  "Ridly Greig": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ridly-greig"
+  },
+  "Jonas Brodin": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jonas-brodin"
+  },
+  "Ryan Pulock": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ryan-pulock"
+  },
+  "Mathew Barzal": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/mathew-barzal"
   },
   "Joey Daccord": {
     "team": "UNK",
     "reason": "",
     "url": "/player/joel-daccord"
+  },
+  "Max Domi": {
+    "team": "TOR",
+    "reason": "травма спины",
+    "url": "/player/max-domi"
+  },
+  "Jonah Gadjovich": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jonah-gadjovich"
+  },
+  "Logan Couture": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/logan-couture"
+  },
+  "Matt Murray": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/matt-murray"
+  },
+  "Dmitri Voronkov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/dimitri-voronkov"
+  },
+  "Joel Eriksson Ek": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/joel-erikssonek"
+  },
+  "Zach Bogosian": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/zach-bogosian"
+  },
+  "Auston Matthews": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/auston-matthews"
+  },
+  "Brandon Carlo": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/brandon-carlo"
+  },
+  "Stefan Noesen": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/stefan-noesen"
+  },
+  "Evander Kane": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/evander-kane"
+  },
+  "Caleb Jones": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/caleb-jones"
+  },
+  "Charlie Stramel": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/charlie-stramel"
+  },
+  "Sam Bennett": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/sam-bennett"
+  },
+  "Evan Rodrigues": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/evan-rodrigues"
+  },
+  "Gustav Nyquist": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/gustav-nyquist"
+  },
+  "Jordan Kyrou": {
+    "team": "WSH",
+    "reason": "травма колена",
+    "url": "/player/jordan-kyrou"
+  },
+  "Barrett Hayton": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/barrett-hayton"
+  },
+  "Joel Hanley": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/joel-hanley"
+  },
+  "Derek Forbort": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/derek-forbort"
+  },
+  "Petr Mrazek": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/petr-mrazek"
+  },
+  "Nils Lundkvist": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/nils-lundkvist"
+  },
+  "Brendan Smith": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/brendan-smith"
+  },
+  "Mason Appleton": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/mason-appleton"
+  },
+  "Nick Jensen": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/nick-jensen"
+  },
+  "Semyon Varlamov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/semyon-varlamov"
+  },
+  "Pierre-Luc Dubois": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/pierre-luc-dubois"
+  },
+  "Valeri Nichushkin": {
+    "team": "COL",
+    "reason": "травма нижней части тела",
+    "url": "/player/valeri-nichushkin"
+  },
+  "Alexander Romanov": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/alexander-romanov"
+  },
+  "Neal Pionk": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/neal-pionk"
+  },
+  "Viktor Arvidsson": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/viktor-arvidsson"
+  },
+  "Max Jones": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/max-jones"
+  },
+  "Filip Gustavsson": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/filip-gustavsson"
+  },
+  "Matt Rempe": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/matt-rempe"
+  },
+  "Tomas Nosek": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/tomas-nosek"
   }
 }
