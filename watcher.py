@@ -109,7 +109,7 @@ async def async_check():
     # --- ИТОГОВОЕ РЕШЕНИЕ ---
     if need_to_run_parser:
         logger.info("Активация основного парсера github.py...")
-        subprocess.run(["python3", "github.py"])
+        subprocess.run(["Sportac.py", "github.py"])
     else:
         logger.info("Изменений не найдено. Засыпаем.")
 
