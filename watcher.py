@@ -28,73 +28,78 @@ def extract_list(data):
     return []
 
 async def async_check():
-    logger.info("Начинаем проверку обновлений через перехватчик сетевых ответов...")
+    logger.info("Начинаем облегченную проверку обновлений...")
     need_to_run_parser = False
     
     from playwright.async_api import async_playwright
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        # Ограничиваем аппетиты Chromium, чтобы уместиться в 512МБ лимит Render
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox", 
+                "--disable-setuid-sandbox", 
+                "--disable-dev-shm-usage", 
+                "--disable-gpu"
+            ]
+        )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         
-        # Словарь для хранения перехваченного JSON по каждому разделу
+        # ЭКОНОМИЯ ПАМЯТИ: Блокируем загрузку картинок, шрифтов, видео и стилей.
+        # Нам нужен только текст и запросы к API, остальное — мусор.
+        async def block_heavy_resources(route):
+            if route.request.resource_type in ["image", "font", "media", "stylesheet"]:
+                await route.abort()
+            else:
+                await route.continue_()
+        
+        await page.route("**/*", block_heavy_resources)
+        
         captured_data = {"signings": None, "trades": None, "transactions": None}
         
-        # Функция-слушатель: ловит ответы от сервера самой PuckPedia
         async def handle_response(response):
             url = response.url
             if response.status == 200:
                 try:
                     if "api_signings" in url:
                         captured_data["signings"] = await response.json()
-                        logger.info("Успешно перехвачен JSON подписаний.")
+                        logger.info("Перехвачен API-ответ подписаний.")
                     elif "api_trades" in url:
                         captured_data["trades"] = await response.json()
-                        logger.info("Успешно перехвачен JSON трейдов.")
+                        logger.info("Перехвачен API-ответ трейдов.")
                     elif "api_transactions" in url:
                         captured_data["transactions"] = await response.json()
-                        logger.info("Успешно перехвачен JSON транзакций.")
+                        logger.info("Перехвачен API-ответ транзакций.")
                 except Exception:
                     pass
 
         page.on("response", handle_response)
 
-        # 1. Загружаем страницу подписаний
-        try:
-            logger.info("Открываем страницу подписаний...")
-            await page.goto("https://puckpedia.com/signings", wait_until="load", timeout=45000)
-            await asyncio.sleep(4)  # Даем время на выполнение внутренних скриптов
-        except Exception as e:
-            logger.error(f"Не удалось загрузить страницу подписаний: {e}")
-
-        # 2. Загружаем страницу трейдов
-        try:
-            logger.info("Открываем страницу трейдов...")
-            await page.goto("https://puckpedia.com/trades", wait_until="load", timeout=45000)
-            await asyncio.sleep(4)
-        except Exception as e:
-            logger.error(f"Не удалось загрузить страницу трейдов: {e}")
-
-        # 3. Загружаем страницу транзакций
-        try:
-            logger.info("Открываем страницу транзакций...")
-            await page.goto("https://puckpedia.com/transactions", wait_until="load", timeout=45000)
-            await asyncio.sleep(4)
-        except Exception as e:
-            logger.error(f"Не удалось загрузить страницу транзакций: {e}")
+        # Перебираем страницы быстро. wait_until="domcontentloaded" не ждет загрузки рекламы
+        for page_type, url in [
+            ("signings", "https://puckpedia.com/signings"),
+            ("trades", "https://puckpedia.com/trades"),
+            ("transactions", "https://puckpedia.com/transactions")
+        ]:
+            try:
+                logger.info(f"Открываем страницу {page_type}...")
+                await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                await asyncio.sleep(3)  # Короткая пауза, чтобы внутренний JS сайта успел сделать запрос
+            except Exception as e:
+                logger.error(f"Не удалось полностью загрузить {page_type}, проверяем что успели поймать: {e}")
 
         await browser.close()
 
-    # --- АНАЛИЗ ПОЛУЧЕННЫХ ДАННЫХ ---
+    # --- АНАЛИЗ ДАННЫХ ---
     
-    # 1. Проверка подписаний
     if captured_data["signings"]:
         items = extract_list(captured_data["signings"])
         if items:
             current_id = str(items[0].get("cid", "") or items[0].get("id", ""))
-            logger.info(f"Последний ID подписания на сайте: {current_id}")
+            logger.info(f"ID последнего подписания: {current_id}")
             cache = {}
             if os.path.exists(CACHE_FILE):
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -102,15 +107,12 @@ async def async_check():
             if current_id != cache.get("signings", {}).get("last_id", ""):
                 logger.info("Обнаружены новые подписания!")
                 need_to_run_parser = True
-    else:
-        logger.warning("Данные API подписаний не были получены.")
 
-    # 2. Проверка трейдов
     if captured_data["trades"]:
         items = extract_list(captured_data["trades"])
         if items:
             current_id = str(items[0].get("trade_id", "") or items[0].get("id", ""))
-            logger.info(f"Последний ID трейда на сайте: {current_id}")
+            logger.info(f"ID последнего трейда: {current_id}")
             cache = {}
             if os.path.exists(CACHE_FILE):
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -118,15 +120,12 @@ async def async_check():
             if current_id != cache.get("trades", {}).get("last_id", ""):
                 logger.info("Обнаружены новые трейды!")
                 need_to_run_parser = True
-    else:
-        logger.warning("Данные API трейдов не были получены.")
 
-    # 3. Проверка транзакций
     if captured_data["transactions"]:
         items = extract_list(captured_data["transactions"])
         if items:
             current_id = str(items[0].get("transaction_id", "") or items[0].get("id", ""))
-            logger.info(f"Последний ID транзакции на сайте: {current_id}")
+            logger.info(f"ID последней транзакции: {current_id}")
             tx_cache = {}
             if os.path.exists(TRANSACTIONS_CACHE_FILE):
                 with open(TRANSACTIONS_CACHE_FILE, "r", encoding="utf-8") as f:
@@ -134,15 +133,13 @@ async def async_check():
             if current_id != tx_cache.get("last_id", ""):
                 logger.info("Обнаружены новые транзакции!")
                 need_to_run_parser = True
-    else:
-        logger.warning("Данные API транзакций не были получены.")
 
-    # --- ИТОГОВОЕ РЕШЕНИЕ ---
+    # --- ИТОГ ---
     if need_to_run_parser:
         logger.info("Активация основного парсера github.py...")
         subprocess.run(["python3", "github.py"])
     else:
-        logger.info("Изменений на сайте не найдено. Засыпаем.")
+        logger.info("Изменений не найдено. Засыпаем.")
 
 def check_for_updates():
     asyncio.run(async_check())
