@@ -13,6 +13,7 @@ app = FastAPI()
 
 CACHE_FILE = "last_data_cache.json"
 TRANSACTIONS_CACHE_FILE = "transactions_cache.json"
+SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "")
 
 def extract_list(data):
     if isinstance(data, list): 
@@ -28,10 +29,16 @@ def extract_list(data):
     return []
 
 async def async_check():
-    logger.info("Начинаем проверку обновлений с прогревом сессии Cloudflare...")
+    logger.info("Начинаем стабильную проверку обновлений через ScraperAPI...")
+    
+    if not SCRAPERAPI_KEY:
+        logger.error("КРИТИЧЕСКАЯ ОШИБКА: Переменная SCRAPERAPI_KEY не найдена в Render!")
+        return
+
     need_to_run_parser = False
     
-    urls = {
+    # Оригинальные эндпоинты PuckPedia
+    target_urls = {
         "signings": 'https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A5%7D',
         "trades": 'https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A5%7D',
         "transactions": 'https://puckpedia.com/data/api_transactions?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A5%2C%22transaction_type%22%3A%22roster%22%7D'
@@ -40,41 +47,28 @@ async def async_check():
     captured_data = {"signings": None, "trades": None, "transactions": None}
     
     async with AsyncSession() as session:
-        try:
-            # ШАГ 1: Прогрев. Заходим на главную страницу, чтобы Cloudflare зафиксировал нас и выдал базовые куки
-            logger.info("Шаг 1: Прогреваем сессию на главной странице PuckPedia...")
-            await session.get("https://puckpedia.com/", impersonate="chrome120", timeout=20)
-            await asyncio.sleep(2)
+        for key, target_url in target_urls.items():
+            logger.info(f"Запрашиваем {key} через чистый прокси-канал...")
             
-            for key, url in urls.items():
-                # ШАГ 2: Имитируем, что пользователь перешел в конкретный раздел сайта
-                logger.info(f"Шаг 2: Имитируем переход человека на страницу https://puckpedia.com/{key}...")
-                await session.get(f"https://puckpedia.com/{key}", impersonate="chrome120", timeout=20)
-                await asyncio.sleep(2)
-                
-                # ШАГ 3: Делаем запрос к API, имея легитимный контекст и куки
-                logger.info(f"Шаг 3: Запрашиваем API напрямую для {key}...")
-                response = await session.get(
-                    url,
-                    impersonate="chrome120",
-                    headers={
-                        "Referer": f"https://puckpedia.com/{key}",
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Accept": "application/json, text/plain, */*"
-                    },
-                    timeout=20
-                )
+            # Формируем запрос через ScraperAPI, который сам обходит Cloudflare
+            proxy_url = "http://api.scraperapi.com"
+            payload = {
+                "api_key": SCRAPERAPI_KEY,
+                "url": target_url
+            }
+            
+            try:
+                response = await session.get(proxy_url, params=payload, timeout=30)
                 
                 if response.status_code == 200:
                     captured_data[key] = response.json()
                     logger.info(f"Успешно получили чистый JSON для {key}!")
                 else:
-                    logger.error(f"Cloudflare отклонил запрос {key}. Статус: {response.status_code}")
-                
-                await asyncio.sleep(2)  # Небольшая пауза между разделами
-                
-        except Exception as e:
-            logger.error(f"Критическая ошибка во время сессии curl_cffi: {e}")
+                    logger.error(f"Ошибка прокси при запросе {key}. Статус: {response.status_code}. Ответ: {response.text[:100]}")
+            except Exception as e:
+                logger.error(f"Не удалось выполнить запрос для {key} через прокси: {e}")
+            
+            await asyncio.sleep(1)
 
     # --- АНАЛИЗ ДАННЫХ ---
     if captured_data["signings"]:
