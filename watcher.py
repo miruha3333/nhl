@@ -1,6 +1,6 @@
 import os
+import re
 import json
-import subprocess
 import logging
 import asyncio
 from fastapi import FastAPI, BackgroundTasks
@@ -13,107 +13,119 @@ app = FastAPI()
 
 CACHE_FILE = "last_data_cache.json"
 TRANSACTIONS_CACHE_FILE = "transactions_cache.json"
-SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "")
 
-def extract_list(data):
-    if isinstance(data, list): 
-        return data
-    if isinstance(data, dict):
-        inner = data.get('data', data)
-        if isinstance(inner, list): 
-            return inner
-        if isinstance(inner, dict):
-            for key in ('p', 'rows', 'results', 'items', 'data'):
-                if key in inner and isinstance(inner[key], list):
-                    return inner[key]
-    return []
+# Читаем настройки GitHub из окружения
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "")  # формат: "username/repo"
+GITHUB_WORKFLOW = os.environ.get("GITHUB_WORKFLOW", "main.yml")  # имя файла воркфлоу
 
-async def async_check():
-    logger.info("Начинаем стабильную проверку обновлений через ScraperAPI...")
-    
-    if not SCRAPERAPI_KEY:
-        logger.error("КРИТИЧЕСКАЯ ОШИБКА: Переменная SCRAPERAPI_KEY не найдена в Render!")
+async def trigger_github_action():
+    """Отправляет запрос на GitHub Actions для запуска основного парсера"""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        logger.error("Не настроены переменные GITHUB_TOKEN или GITHUB_REPO. Запуск невозможен.")
         return
-
-    need_to_run_parser = False
     
-    # Оригинальные эндпоинты PuckPedia
-    target_urls = {
-        "signings": 'https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A5%7D',
-        "trades": 'https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A5%7D',
-        "transactions": 'https://puckpedia.com/data/api_transactions?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A5%2C%22transaction_type%22%3A%22roster%22%7D'
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{GITHUB_WORKFLOW}/dispatches"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
     }
-    
-    captured_data = {"signings": None, "trades": None, "transactions": None}
+    data = {"ref": "main"}  # или твоя ветка по умолчанию
     
     async with AsyncSession() as session:
-        for key, target_url in target_urls.items():
-            logger.info(f"Запрашиваем {key} через чистый прокси-канал...")
-            
-            # Формируем запрос через ScraperAPI, который сам обходит Cloudflare
-            proxy_url = "http://api.scraperapi.com"
-            payload = {
-                "api_key": SCRAPERAPI_KEY,
-                "url": target_url
-            }
-            
+        try:
+            logger.info("Отправляем сигнал на запуск воркфлоу в GitHub Actions...")
+            res = await session.post(url, headers=headers, json=data)
+            if res.status_code == 204:
+                logger.info("GitHub Actions успешно запущен! Парсер начал работу на стороне GitHub.")
+            else:
+                logger.error(f"Не удалось запустить GitHub Actions. Статус: {res.status_code}, Ответ: {res.text}")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке запроса к GitHub API: {e}")
+
+async def async_check():
+    logger.info("Начинаем проверку обновлений через анализ HTML страниц...")
+    need_to_run_parser = False
+    
+    pages = {
+        "signings": "https://puckpedia.com/signings",
+        "trades": "https://puckpedia.com/trades",
+        "transactions": "https://puckpedia.com/transactions"
+    }
+    
+    captured_ids = {"signings": None, "trades": None, "transactions": None}
+    
+    async with AsyncSession() as session:
+        for key, url in pages.items():
+            logger.info(f"Запрашиваем страницу {url}...")
             try:
-                response = await session.get(proxy_url, params=payload, timeout=30)
-                
+                response = await session.get(
+                    url, 
+                    impersonate="chrome120", 
+                    headers={"Accept": "text/html"},
+                    timeout=20
+                )
                 if response.status_code == 200:
-                    captured_data[key] = response.json()
-                    logger.info(f"Успешно получили чистый JSON для {key}!")
+                    html_text = response.text
+                    
+                    # Ищем ID в HTML коде (они зашиты в атрибутах или в JSON конфигурации на странице)
+                    if key == "signings":
+                        match = re.search(r'"cid":\s*"?(\d+)"?', html_text) or re.search(r'data-id="(\d+)"', html_text)
+                    elif key == "trades":
+                        match = re.search(r'"trade_id":\s*"?(\d+)"?', html_text) or re.search(r'trade-id="(\d+)"', html_text)
+                    else:
+                        match = re.search(r'"transaction_id":\s*"?(\d+)"?', html_text) or re.search(r'transaction-id="(\d+)"', html_text)
+                    
+                    if match:
+                        captured_ids[key] = match.group(1)
+                        logger.info(f"Найден свежий ID для {key}: {captured_ids[key]}")
+                    else:
+                        # Если регулярка не сработала, попробуем поискать любой первый попавшийся ID в структурах данных
+                        fallback = re.search(r'"id":\s*"?(\d+)"?', html_text)
+                        if fallback:
+                            captured_ids[key] = fallback.group(1)
+                            logger.info(f"Фолбэк: найден ID для {key}: {captured_ids[key]}")
+                        else:
+                            logger.warning(f"Не удалось вытащить ID со страницы {key}, хотя она загрузилась.")
                 else:
-                    logger.error(f"Ошибка прокси при запросе {key}. Статус: {response.status_code}. Ответ: {response.text[:100]}")
+                    logger.error(f"Cloudflare заблокировал страницу {key}. Статус: {response.status_code}")
             except Exception as e:
-                logger.error(f"Не удалось выполнить запрос для {key} через прокси: {e}")
+                logger.error(f"Ошибка при обработке страницы {key}: {e}")
             
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
 
-    # --- АНАЛИЗ ДАННЫХ ---
-    if captured_data["signings"]:
-        items = extract_list(captured_data["signings"])
-        if items:
-            current_id = str(items[0].get("cid", "") or items[0].get("id", ""))
-            logger.info(f"ID последнего подписания на сайте: {current_id}")
-            cache = {}
-            if os.path.exists(CACHE_FILE):
-                with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    cache = json.load(f)
-            if current_id != cache.get("signings", {}).get("last_id", ""):
-                logger.info("Обнаружены новые подписания!")
-                need_to_run_parser = True
+    # --- АНАЛИЗ КЭША ---
+    if captured_ids["signings"]:
+        cache = {}
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        if captured_ids["signings"] != cache.get("signings", {}).get("last_id", ""):
+            logger.info("Обнаружены новые подписания!")
+            need_to_run_parser = True
 
-    if captured_data["trades"]:
-        items = extract_list(captured_data["trades"])
-        if items:
-            current_id = str(items[0].get("trade_id", "") or items[0].get("id", ""))
-            logger.info(f"ID последнего трейда на сайте: {current_id}")
-            cache = {}
-            if os.path.exists(CACHE_FILE):
-                with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    cache = json.load(f)
-            if current_id != cache.get("trades", {}).get("last_id", ""):
-                logger.info("Обнаружены новые трейды!")
-                need_to_run_parser = True
+    if captured_ids["trades"]:
+        cache = {}
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        if captured_ids["trades"] != cache.get("trades", {}).get("last_id", ""):
+            logger.info("Обнаружены новые трейды!")
+            need_to_run_parser = True
 
-    if captured_data["transactions"]:
-        items = extract_list(captured_data["transactions"])
-        if items:
-            current_id = str(items[0].get("transaction_id", "") or items[0].get("id", ""))
-            logger.info(f"ID последней транзакции на сайте: {current_id}")
-            tx_cache = {}
-            if os.path.exists(TRANSACTIONS_CACHE_FILE):
-                with open(TRANSACTIONS_CACHE_FILE, "r", encoding="utf-8") as f:
-                    tx_cache = json.load(f)
-            if current_id != tx_cache.get("last_id", ""):
-                logger.info("Обнаружены новые транзакции!")
-                need_to_run_parser = True
+    if captured_ids["transactions"]:
+        tx_cache = {}
+        if os.path.exists(TRANSACTIONS_CACHE_FILE):
+            with open(TRANSACTIONS_CACHE_FILE, "r", encoding="utf-8") as f:
+                tx_cache = json.load(f)
+        if captured_ids["transactions"] != tx_cache.get("last_id", ""):
+            logger.info("Обнаружены новые транзакции!")
+            need_to_run_parser = True
 
     # --- ИТОГОВОЕ РЕШЕНИЕ ---
     if need_to_run_parser:
-        logger.info("Активация основного парсера parser.py...")
-        subprocess.run(["python3", "parser.py"])
+        await trigger_github_action()
     else:
         logger.info("Изменений не найдено. Засыпаем.")
 
