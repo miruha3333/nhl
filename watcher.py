@@ -28,7 +28,7 @@ def extract_list(data):
     return []
 
 async def async_check():
-    logger.info("Начинаем проверку обновлений через имперсонатор TLS (curl_cffi)...")
+    logger.info("Начинаем проверку обновлений с прогревом сессии Cloudflare...")
     need_to_run_parser = False
     
     urls = {
@@ -39,34 +39,44 @@ async def async_check():
     
     captured_data = {"signings": None, "trades": None, "transactions": None}
     
-    # Открываем сессию с имитацией отпечатка браузера Chrome 120
     async with AsyncSession() as session:
-        for key, url in urls.items():
-            logger.info(f"Запрашиваем API напрямую для {key}...")
-            try:
+        try:
+            # ШАГ 1: Прогрев. Заходим на главную страницу, чтобы Cloudflare зафиксировал нас и выдал базовые куки
+            logger.info("Шаг 1: Прогреваем сессию на главной странице PuckPedia...")
+            await session.get("https://puckpedia.com/", impersonate="chrome120", timeout=20)
+            await asyncio.sleep(2)
+            
+            for key, url in urls.items():
+                # ШАГ 2: Имитируем, что пользователь перешел в конкретный раздел сайта
+                logger.info(f"Шаг 2: Имитируем переход человека на страницу https://puckpedia.com/{key}...")
+                await session.get(f"https://puckpedia.com/{key}", impersonate="chrome120", timeout=20)
+                await asyncio.sleep(2)
+                
+                # ШАГ 3: Делаем запрос к API, имея легитимный контекст и куки
+                logger.info(f"Шаг 3: Запрашиваем API напрямую для {key}...")
                 response = await session.get(
                     url,
                     impersonate="chrome120",
                     headers={
-                        "Accept": "application/json, text/plain, */*",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "Referer": "https://puckpedia.com/",
-                        "X-Requested-With": "XMLHttpRequest"
+                        "Referer": f"https://puckpedia.com/{key}",
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json, text/plain, */*"
                     },
                     timeout=20
                 )
+                
                 if response.status_code == 200:
                     captured_data[key] = response.json()
                     logger.info(f"Успешно получили чистый JSON для {key}!")
                 else:
                     logger.error(f"Cloudflare отклонил запрос {key}. Статус: {response.status_code}")
-            except Exception as e:
-                logger.error(f"Не удалось выполнить запрос для {key}: {e}")
-            
-            await asyncio.sleep(2)  # Безопасная пауза между запросами
+                
+                await asyncio.sleep(2)  # Небольшая пауза между разделами
+                
+        except Exception as e:
+            logger.error(f"Критическая ошибка во время сессии curl_cffi: {e}")
 
     # --- АНАЛИЗ ДАННЫХ ---
-    
     if captured_data["signings"]:
         items = extract_list(captured_data["signings"])
         if items:
@@ -108,8 +118,8 @@ async def async_check():
 
     # --- ИТОГОВОЕ РЕШЕНИЕ ---
     if need_to_run_parser:
-        logger.info("Активация основного парсера github.py...")
-        subprocess.run(["Sportac.py", "github.py"])
+        logger.info("Активация основного парсера parser.py...")
+        subprocess.run(["python3", "parser.py"])
     else:
         logger.info("Изменений не найдено. Засыпаем.")
 
