@@ -34,16 +34,23 @@ async def async_check():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+            args=[
+                "--no-sandbox", 
+                "--disable-setuid-sandbox", 
+                "--disable-dev-shm-usage", 
+                "--disable-gpu",
+                # МАСКИРОВКА: Удаляет флаг автоматизации, ломая проверки анти-ботов
+                "--disable-blink-features=AutomationControlled" 
+            ]
         )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         
-        # Блокируем мусор, чтобы экономить память
+        # Блокируем только медиа, картинки и шрифты. Стили (css) оставляем для корректной работы JS
         async def block_heavy_resources(route):
-            if route.request.resource_type in ["image", "font", "media", "stylesheet"]:
+            if route.request.resource_type in ["image", "font", "media"]:
                 await route.abort()
             else:
                 await route.continue_()
@@ -52,11 +59,14 @@ async def async_check():
         
         captured_data = {"signings": None, "trades": None, "transactions": None}
         
-        # Улучшенный слушатель сети: теперь он покажет в логах, если поймал нужный URL
         async def handle_response(response):
             url = response.url
+            
+            # ДИАГНОСТИКА: Логируем вообще любые фоновые запросы сайта, чтобы понять, живой ли он
+            if response.request.resource_type in ["xhr", "fetch"]:
+                logger.info(f"Пойман AJAX-запрос: {url[:70]}... [Статус: {response.status}]")
+            
             if "api_signings" in url or "api_trades" in url or "api_transactions" in url:
-                logger.info(f"Обнаружен сетевой запрос сайта: {url[:60]}... [Статус: {response.status}]")
                 if response.status == 200:
                     try:
                         data = await response.json()
@@ -74,7 +84,6 @@ async def async_check():
 
         page.on("response", handle_response)
 
-        # Перебираем страницы, увеличив паузу до 6 секунд для стабильности на Render
         for page_type, url in [
             ("signings", "https://puckpedia.com/signings"),
             ("trades", "https://puckpedia.com/trades"),
@@ -83,7 +92,12 @@ async def async_check():
             try:
                 logger.info(f"Открываем страницу {page_type}...")
                 await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(6)  # Даем 6 секунд, чтобы JS сайта успел запросить данные
+                
+                # ДИАГНОСТИКА: Проверяем, что именно видит браузер
+                page_title = await page.title()
+                logger.info(f"Страница {page_type} загружена. Заголовок: '{page_title}'")
+                
+                await asyncio.sleep(6)  # Ждем запросов от скриптов сайта
             except Exception as e:
                 logger.error(f"Ошибка при загрузке {page_type}: {e}")
 
