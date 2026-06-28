@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-requests
-playwright
-curl_cffi
