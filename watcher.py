@@ -5,7 +5,6 @@ import logging
 import asyncio
 from fastapi import FastAPI, BackgroundTasks
 
-# Настраиваем вывод логов
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -33,23 +32,16 @@ async def async_check():
     
     from playwright.async_api import async_playwright
     async with async_playwright() as p:
-        # Ограничиваем аппетиты Chromium, чтобы уместиться в 512МБ лимит Render
         browser = await p.chromium.launch(
             headless=True,
-            args=[
-                "--no-sandbox", 
-                "--disable-setuid-sandbox", 
-                "--disable-dev-shm-usage", 
-                "--disable-gpu"
-            ]
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
         )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         
-        # ЭКОНОМИЯ ПАМЯТИ: Блокируем загрузку картинок, шрифтов, видео и стилей.
-        # Нам нужен только текст и запросы к API, остальное — мусор.
+        # Блокируем мусор, чтобы экономить память
         async def block_heavy_resources(route):
             if route.request.resource_type in ["image", "font", "media", "stylesheet"]:
                 await route.abort()
@@ -60,25 +52,29 @@ async def async_check():
         
         captured_data = {"signings": None, "trades": None, "transactions": None}
         
+        # Улучшенный слушатель сети: теперь он покажет в логах, если поймал нужный URL
         async def handle_response(response):
             url = response.url
-            if response.status == 200:
-                try:
-                    if "api_signings" in url:
-                        captured_data["signings"] = await response.json()
-                        logger.info("Перехвачен API-ответ подписаний.")
-                    elif "api_trades" in url:
-                        captured_data["trades"] = await response.json()
-                        logger.info("Перехвачен API-ответ трейдов.")
-                    elif "api_transactions" in url:
-                        captured_data["transactions"] = await response.json()
-                        logger.info("Перехвачен API-ответ транзакций.")
-                except Exception:
-                    pass
+            if "api_signings" in url or "api_trades" in url or "api_transactions" in url:
+                logger.info(f"Обнаружен сетевой запрос сайта: {url[:60]}... [Статус: {response.status}]")
+                if response.status == 200:
+                    try:
+                        data = await response.json()
+                        if "api_signings" in url:
+                            captured_data["signings"] = data
+                            logger.info("JSON подписаний успешно сохранен в память.")
+                        elif "api_trades" in url:
+                            captured_data["trades"] = data
+                            logger.info("JSON трейдов успешно сохранен в память.")
+                        elif "api_transactions" in url:
+                            captured_data["transactions"] = data
+                            logger.info("JSON транзакций успешно сохранен в память.")
+                    except Exception as e:
+                        logger.error(f"Ошибка разбора JSON: {e}")
 
         page.on("response", handle_response)
 
-        # Перебираем страницы быстро. wait_until="domcontentloaded" не ждет загрузки рекламы
+        # Перебираем страницы, увеличив паузу до 6 секунд для стабильности на Render
         for page_type, url in [
             ("signings", "https://puckpedia.com/signings"),
             ("trades", "https://puckpedia.com/trades"),
@@ -86,10 +82,10 @@ async def async_check():
         ]:
             try:
                 logger.info(f"Открываем страницу {page_type}...")
-                await page.goto(url, wait_until="domcontentloaded", timeout=25000)
-                await asyncio.sleep(3)  # Короткая пауза, чтобы внутренний JS сайта успел сделать запрос
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(6)  # Даем 6 секунд, чтобы JS сайта успел запросить данные
             except Exception as e:
-                logger.error(f"Не удалось полностью загрузить {page_type}, проверяем что успели поймать: {e}")
+                logger.error(f"Ошибка при загрузке {page_type}: {e}")
 
         await browser.close()
 
@@ -99,7 +95,7 @@ async def async_check():
         items = extract_list(captured_data["signings"])
         if items:
             current_id = str(items[0].get("cid", "") or items[0].get("id", ""))
-            logger.info(f"ID последнего подписания: {current_id}")
+            logger.info(f"ID последнего подписания на сайте: {current_id}")
             cache = {}
             if os.path.exists(CACHE_FILE):
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -112,7 +108,7 @@ async def async_check():
         items = extract_list(captured_data["trades"])
         if items:
             current_id = str(items[0].get("trade_id", "") or items[0].get("id", ""))
-            logger.info(f"ID последнего трейда: {current_id}")
+            logger.info(f"ID последнего трейда на сайте: {current_id}")
             cache = {}
             if os.path.exists(CACHE_FILE):
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -125,7 +121,7 @@ async def async_check():
         items = extract_list(captured_data["transactions"])
         if items:
             current_id = str(items[0].get("transaction_id", "") or items[0].get("id", ""))
-            logger.info(f"ID последней транзакции: {current_id}")
+            logger.info(f"ID последней транзакции на сайте: {current_id}")
             tx_cache = {}
             if os.path.exists(TRANSACTIONS_CACHE_FILE):
                 with open(TRANSACTIONS_CACHE_FILE, "r", encoding="utf-8") as f:
