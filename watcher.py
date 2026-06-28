@@ -27,7 +27,7 @@ def extract_list(data):
     return []
 
 async def async_check():
-    logger.info("Начинаем облегченную проверку обновлений...")
+    logger.info("Начинаем скрытную проверку обновлений...")
     need_to_run_parser = False
     
     from playwright.async_api import async_playwright
@@ -39,18 +39,26 @@ async def async_check():
                 "--disable-setuid-sandbox", 
                 "--disable-dev-shm-usage", 
                 "--disable-gpu",
-                # МАСКИРОВКА: Удаляет флаг автоматизации, ломая проверки анти-ботов
-                "--disable-blink-features=AutomationControlled" 
+                # Отключаем флаг автоматизации на уровне ключей запуска
+                "--disable-blink-features=AutomationControlled"
             ]
         )
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
         )
         page = await context.new_page()
         
-        # Блокируем только медиа, картинки и шрифты. Стили (css) оставляем для корректной работы JS
+        # ГЛУБОКАЯ МАСКИРОВКА: Удаляем navigator.webdriver изнутри самого JS-движка
+        await page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
+        
+        # Блокируем только тяжелые медиа и шрифты. Картинки и CSS оставляем, чтобы Cloudflare не заподозрил неладное
         async def block_heavy_resources(route):
-            if route.request.resource_type in ["image", "font", "media"]:
+            if route.request.resource_type in ["font", "media"]:
                 await route.abort()
             else:
                 await route.continue_()
@@ -61,26 +69,19 @@ async def async_check():
         
         async def handle_response(response):
             url = response.url
-            
-            # ДИАГНОСТИКА: Логируем вообще любые фоновые запросы сайта, чтобы понять, живой ли он
-            if response.request.resource_type in ["xhr", "fetch"]:
-                logger.info(f"Пойман AJAX-запрос: {url[:70]}... [Статус: {response.status}]")
-            
             if "api_signings" in url or "api_trades" in url or "api_transactions" in url:
+                logger.info(f"Поймали внутренний запрос: {url[:60]}... [Статус: {response.status}]")
                 if response.status == 200:
                     try:
                         data = await response.json()
                         if "api_signings" in url:
                             captured_data["signings"] = data
-                            logger.info("JSON подписаний успешно сохранен в память.")
                         elif "api_trades" in url:
                             captured_data["trades"] = data
-                            logger.info("JSON трейдов успешно сохранен в память.")
                         elif "api_transactions" in url:
                             captured_data["transactions"] = data
-                            logger.info("JSON транзакций успешно сохранен в память.")
                     except Exception as e:
-                        logger.error(f"Ошибка разбора JSON: {e}")
+                        logger.error(f"Ошибка чтения JSON: {e}")
 
         page.on("response", handle_response)
 
@@ -91,20 +92,25 @@ async def async_check():
         ]:
             try:
                 logger.info(f"Открываем страницу {page_type}...")
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                # Возвращаем стандартное ожидание "load", чтобы Cloudflare успел отработать
+                await page.goto(url, wait_until="load", timeout=45000)
                 
-                # ДИАГНОСТИКА: Проверяем, что именно видит браузер
-                page_title = await page.title()
-                logger.info(f"Страница {page_type} загружена. Заголовок: '{page_title}'")
+                # Ждем, пока Cloudflare пропустит нас (исчезнет заголовок проверки)
+                for _ in range(10):
+                    title = await page.title()
+                    if "Just a moment" not in title:
+                        break
+                    await asyncio.sleep(2)
                 
-                await asyncio.sleep(6)  # Ждем запросов от скриптов сайта
+                logger.info(f"Успешно зашли. Текущий заголовок: '{await page.title()}'")
+                await asyncio.sleep(5)  # Время на загрузку внутренних таблиц сайта
+                
             except Exception as e:
-                logger.error(f"Ошибка при загрузке {page_type}: {e}")
+                logger.error(f"Не удалось пройти на страницу {page_type}: {e}")
 
         await browser.close()
 
     # --- АНАЛИЗ ДАННЫХ ---
-    
     if captured_data["signings"]:
         items = extract_list(captured_data["signings"])
         if items:
