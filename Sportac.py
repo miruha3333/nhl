@@ -5,6 +5,7 @@ import subprocess
 import requests
 import json
 from playwright.async_api import async_playwright
+from deep_translator import GoogleTranslator
 
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
@@ -213,7 +214,7 @@ def build_transaction_line(parsed):
     elif action == 'placed_ir':
         return f"{name} переведён в список травмированных"
     elif action == 'activated_ir':
-        return f"{name} активирован из списка травмированных"
+        return f"{name} activated из списка травмированных"
     elif action == 'will_activated_ltir':
         return f"{name} будет активирован из долгосрочного списка травмированных"
     elif action == 'placed_ltir':
@@ -247,17 +248,25 @@ def build_transaction_line(parsed):
 
 def translate_transaction(raw_text):
     text = re.sub(r'<[^>]+>', '', raw_text).strip()
-    for pattern, extractor in TRANSACTION_PATTERNS:
-        m = pattern.search(text)
-        if m:
-            try:
-                parsed = extractor(m)
-                result = build_transaction_line(parsed)
-                if result:
-                    return result
-            except Exception:
-                continue
-    return text
+    try:
+        translated = GoogleTranslator(source='en', target='ru').translate(text)
+        translated = translated.replace(" для выбора ", " за выбор ")
+        translated = translated.replace(" для выборов ", " за выборы ")
+        translated = translated.replace(" для двух выборов ", " за два выбора ")
+        translated = translated.replace(" для выбора", " за выбор")
+        return translated
+    except Exception:
+        for pattern, extractor in TRANSACTION_PATTERNS:
+            m = pattern.search(text)
+            if m:
+                try:
+                    parsed = extractor(m)
+                    result = build_transaction_line(parsed)
+                    if result:
+                        return result
+                except Exception:
+                    continue
+        return text
 
 
 def load_transactions_cache():
@@ -430,24 +439,29 @@ def format_cap_hit(val_raw):
 def translate_trade(text):
     if "forfeit" in text.lower():
         return text
-    for pattern in [
-        r"The (.+?) acquire (.+?) from the (.+?) for (.+)",
-        r"The (.+?) acquire (.+?) from (.+?) for (.+)"
-    ]:
-        match = re.search(pattern, text)
-        if match:
-            team1, p1, team2, p2 = match.groups()
-            r1 = get_rus_team_data(team1)
-            r2 = get_rus_team_data(team2)
-            
-            # Очищаем списки обмениваемых активов от английских артиклей "a " и "an " перед пиками/игроками
-            p1 = re.sub(r'\b[aA](n)?\s+', '', p1)
-            p2 = re.sub(r'\b[aA](n)?\s+', '', p2)
-            
-            p1 = p1.replace(".", "").replace(" and ", " и ")
-            p2 = p2.replace(".", "").replace(" and ", " и ")
-            return f"{r1['main']} {p2} на {p1} {r2['from']}"
-    return text
+    try:
+        translated = GoogleTranslator(source='en', target='ru').translate(text)
+        translated = translated.replace(" для выбора ", " за выбор ")
+        translated = translated.replace(" для выборов ", " за выборы ")
+        translated = translated.replace(" для двух выборов ", " за два выбора ")
+        translated = translated.replace(" для выбора", " за выбор")
+        return translated
+    except Exception:
+        for pattern in [
+            r"The (.+?) acquire (.+?) from the (.+?) for (.+)",
+            r"The (.+?) acquire (.+?) from (.+?) for (.+)"
+        ]:
+            match = re.search(pattern, text)
+            if match:
+                team1, p1, team2, p2 = match.groups()
+                r1 = get_rus_team_data(team1)
+                r2 = get_rus_team_data(team2)
+                p1 = re.sub(r'\b[aA](n)?\s+', '', p1)
+                p2 = re.sub(r'\b[aA](n)?\s+', '', p2)
+                p1 = p1.replace(".", "").replace(" and ", " и ")
+                p2 = p2.replace(".", "").replace(" and ", " и ")
+                return f"{r1['main']} {p2} на {p1} {r2['from']}"
+        return text
 
 
 def translate_injury(raw):
@@ -615,11 +629,19 @@ async def main():
                     player_url = prev_snapshot[name].get("url", "")
                     if player_url:
                         team_abbr = await get_team_from_profile(page, player_url)
-                        line = (f"✅ {name} ({team_abbr}) активирован из списка травмированных"
+                        try:
+                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                        except Exception:
+                            rus_name = name
+                        line = (f"✅ {rus_name} ({team_abbr}) активирован из списка травмированных"
                                 if team_abbr and team_abbr != "UNK"
-                                else f"✅ {name} активирован из списка травмированных")
+                                else f"✅ {rus_name} активирован из списка травмированных")
                     else:
-                        line = f"✅ {name} активирован из списка травмированных"
+                        try:
+                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                        except Exception:
+                            rus_name = name
+                        line = f"✅ {rus_name} активирован из списка травмированных"
                     recovered_lines.append(line)
                     print(f"  Выздоровление: {line}")
         else:
@@ -701,7 +723,13 @@ async def main():
             ctype = "продлил контракт"
         else:
             ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-        line = f"📝 {name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
+        
+        try:
+            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+        except Exception:
+            rus_name = name
+            
+        line = f"📝 {rus_name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
         all_new.append(line)
 
     if raw_signings:
@@ -788,7 +816,11 @@ async def main():
         else:
             for name, team_abbr, reason, _ in current_injuries_top:
                 if name not in prev_names:
-                    all_new.append(f"❌ {name} ({team_abbr}), {reason}")
+                    try:
+                        rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                    except Exception:
+                        rus_name = name
+                    all_new.append(f"❌ {rus_name} ({team_abbr}), {reason}")
                     print(f"  Новая травма: {name}")
             all_new.extend(recovered_lines)
 
@@ -816,7 +848,12 @@ async def main():
     for line in current_waivers:
         player_name = extract_player_name(line)
         if player_name and player_name not in seen_waiver_names:
-            new_waivers.append(line)
+            try:
+                rus_name = GoogleTranslator(source='en', target='ru').translate(player_name)
+                translated_line = line.replace(player_name, rus_name)
+            except Exception:
+                translated_line = line
+            new_waivers.append(translated_line)
             new_waiver_names.append(player_name)
 
     print(f"Новых уэйверов: {len(new_waivers)}")
