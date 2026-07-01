@@ -1,11 +1,11 @@
 {
   "signings": {
     "last_date": "2026-07-01",
-    "last_id": "10561"
+    "last_id": "10586"
   },
   "trades": {
     "last_date": "2026-07-01",
-    "last_id": "1193"
+    "last_id": "1195"
   },
   "waivers": {
     "current": [
@@ -15,8 +15,8 @@
     ],
     "seen": [
       "Michael Pezzetta",
-      "Jack Ahcan",
-      "Lukas Reichel"
+      "Lukas Reichel",
+      "Jack Ahcan"
     ]
   }
 }
