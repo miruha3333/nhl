@@ -1,7 +1,7 @@
 {
   "signings": {
-    "last_date": "2026-09-18",
-    "last_id": "10816"
+    "last_date": "2026-09-19",
+    "last_id": "10817"
   },
   "trades": {
     "last_date": "2026-09-01",
@@ -16,9 +16,9 @@
     "seen": [
       "Michael Pezzetta",
       "Lukas Reichel",
+      "Marc-Andre Gaudet",
       "Chris Kreider",
-      "Jack Ahcan",
-      "Marc-Andre Gaudet"
+      "Jack Ahcan"
     ]
   }
 }
