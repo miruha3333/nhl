@@ -1,11 +1,11 @@
 {
   "signings": {
     "last_date": "2026-09-28",
-    "last_id": "10829"
+    "last_id": "10830"
   },
   "trades": {
-    "last_date": "2026-09-25",
-    "last_id": "1205"
+    "last_date": "2026-09-28",
+    "last_id": "1206"
   },
   "waivers": {
     "current": [
@@ -14,32 +14,34 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Miles Wood",
-      "James Malatesta",
-      "Viktor Neuchev",
-      "Nathan Gaucher",
-      "Laurent Brossoit",
-      "Alex Steeves",
-      "Chris Kreider",
-      "Ronan Seeley",
-      "Zachary Sawchenko",
-      "Pheonix Copley",
-      "Jon-Randall Avon",
-      "Jacob Bryson",
-      "Michael Pezzetta",
-      "Marc-Andre Gaudet",
-      "Travis Mitchell",
-      "James Hamblin",
-      "Lukas Reichel",
-      "Navrin Mutter",
-      "Maxence Guenette",
-      "Brandon Halverson",
       "Cameron Butler",
+      "Marc-Andre Gaudet",
+      "Michael Pezzetta",
+      "Alex Steeves",
+      "Jacob Bryson",
       "Jack Ahcan",
-      "John Hayden",
+      "Travis Mitchell",
+      "Pheonix Copley",
+      "Derrick Pouliot",
+      "Laurent Brossoit",
+      "Nathan Gaucher",
+      "Lukas Reichel",
       "Sean Farrell",
+      "Ronan Seeley",
+      "Viktor Neuchev",
+      "Maxence Guenette",
+      "James Malatesta",
       "Henri Jokiharju",
-      "Derrick Pouliot"
+      "Zachary Sawchenko",
+      "Chris Kreider",
+      "Miles Wood",
+      "James Hamblin",
+      "Brandon Halverson",
+      "John Hayden",
+      "Navrin Mutter",
+      "Jon-Randall Avon",
+      "Tyson Jost",
+      "Clay Stevenson"
     ]
   }
 }
