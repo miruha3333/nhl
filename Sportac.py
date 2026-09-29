@@ -2,10 +2,18 @@ import asyncio
 import os
 import re
 import subprocess
+import sys
 import requests
 import json
 from playwright.async_api import async_playwright
 from deep_translator import GoogleTranslator
+
+# Режим тестирования: активируется через аргумент --dry-run или --test в терминале, либо переменную окружения DRY_RUN=true
+DRY_RUN = (
+    "--dry-run" in sys.argv
+    or "--test" in sys.argv
+    or os.environ.get("DRY_RUN", "").lower() in ("true", "1")
+)
 
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
@@ -287,6 +295,8 @@ def load_transactions_cache():
 
 
 def save_transactions_cache(cache):
+    if DRY_RUN:
+        return
     with open(TRANSACTIONS_CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
@@ -303,11 +313,16 @@ def load_injuries_snapshot():
 
 
 def save_injuries_snapshot(snapshot):
+    if DRY_RUN:
+        return
     with open(INJURIES_SNAPSHOT_FILE, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
 
 def commit_file(filepath, message):
+    if DRY_RUN:
+        print(f"  [DRY RUN] Пропуск git-коммита файла {filepath}")
+        return
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
@@ -351,11 +366,16 @@ def load_cache():
 
 
 def save_cache(cache):
+    if DRY_RUN:
+        return
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
 def commit_cache():
+    if DRY_RUN:
+        print("  [DRY RUN] Пропуск git-коммита кэша.")
+        return
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
             subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
@@ -386,6 +406,12 @@ def get_rus_team_data(eng_name):
 
 
 def send_to_telegram(text):
+    if DRY_RUN:
+        print("\n" + "=" * 25 + " [ТЕСТ: ТЕКСТОВЫЙ ПОСТ В TELEGRAM] " + "=" * 25)
+        print(text)
+        print("=" * 75 + "\n")
+        return
+
     token = os.environ.get("TG_TOKEN")
     chat_id = os.environ.get("TG_CHAT_ID")
     if not token or not chat_id:
@@ -398,6 +424,50 @@ def send_to_telegram(text):
             requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
         except Exception as e:
             print(f"Ошибка отправки: {e}")
+
+
+def send_photo_to_telegram(photo_url, caption):
+    if DRY_RUN:
+        print("\n" + "=" * 25 + " [ТЕСТ: ПОСТ С ФОТО В TELEGRAM] " + "=" * 25)
+        print(f"🖼️ ССЫЛКА НА ФОТО: {photo_url}")
+        print(f"📝 ТЕКСТ ПОСТА:\n{caption}")
+        print("=" * 74 + "\n")
+        return
+
+    token = os.environ.get("TG_TOKEN")
+    chat_id = os.environ.get("TG_CHAT_ID")
+    if not token or not chat_id:
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+
+    # 1. Пробуем передать ссылку напрямую
+    if photo_url:
+        try:
+            data = {"chat_id": chat_id, "caption": caption, "photo": photo_url}
+            resp = requests.post(url, data=data, timeout=15)
+            if resp.status_code == 200:
+                return
+        except Exception:
+            pass
+
+        # 2. Если по URL не получилось, скачиваем картинку и отправляем файлом
+        try:
+            img_resp = requests.get(
+                photo_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+                timeout=15
+            )
+            if img_resp.status_code == 200:
+                files = {"photo": ("player.png", img_resp.content, "image/png")}
+                resp2 = requests.post(url, data={"chat_id": chat_id, "caption": caption}, files=files, timeout=15)
+                if resp2.status_code == 200:
+                    return
+        except Exception as e:
+            print(f"Ошибка загрузки фото: {e}")
+
+    # 3. Если фото получить не удалось, отправляем текстом
+    send_to_telegram(caption)
 
 
 def get_team_abbr_by_name(team_name_raw):
@@ -525,19 +595,59 @@ async def fetch_api(page, url, label):
     return []
 
 
-async def get_team_from_profile(page, player_url):
-    await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
-    await asyncio.sleep(1.5)
-    all_team_links = await page.eval_on_selector_all(
-        "a[href*='/team/']",
-        "els => els.map(e => e.getAttribute('href'))"
-    )
-    if len(all_team_links) > NAV_LINKS_COUNT:
-        return get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
-    return "UNK"
+async def get_player_profile_details(page, player_url, player_name=""):
+    """
+    Открывает страницу профиля игрока и извлекает:
+    1. Аббревиатуру команды
+    2. Прямую ссылку на фото игрока
+    """
+    try:
+        await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(1.5)
+
+        # 1. Извлекаем команду
+        team_abbr = "UNK"
+        all_team_links = await page.eval_on_selector_all(
+            "a[href*='/team/']",
+            "els => els.map(e => e.getAttribute('href'))"
+        )
+        if len(all_team_links) > NAV_LINKS_COUNT:
+            team_abbr = get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
+
+        # 2. Извлекаем фото игрока
+        photo_url = await page.evaluate('''([pName]) => {
+            const imgs = Array.from(document.querySelectorAll('img'));
+            const parts = (pName || '').toLowerCase().split(/\\s+/).filter(p => p.length > 2);
+
+            // Ищем совпадение по имени в alt или headshot в src
+            const matched = imgs.find(img => {
+                const src = img.src || '';
+                const alt = (img.alt || '').toLowerCase();
+                if (src.includes('logo') || src.includes('flag') || src.includes('icon')) return false;
+                if (parts.length > 0 && parts.some(p => alt.includes(p) || src.toLowerCase().includes(p))) return true;
+                if (src.includes('headshot') || src.includes('nhl.bamcontent.com') || src.includes('assets.nhle.com') || src.includes('/players/')) return true;
+                return false;
+            });
+            if (matched && matched.src) return matched.src;
+
+            // Запасной селектор шапки профиля
+            const headerImg = document.querySelector('.player-headshot img, .player-header img, .player-info img, .bio img');
+            return headerImg ? headerImg.src : null;
+        }''', [player_name])
+
+        if photo_url and photo_url.startswith("/"):
+            photo_url = f"https://puckpedia.com{photo_url}"
+
+        return team_abbr, photo_url
+    except Exception as e:
+        print(f"  Ошибка чтения профиля {player_url}: {e}")
+        return "UNK", None
 
 
 async def main():
+    if DRY_RUN:
+        print("\n🚀 [ТЕСТОВЫЙ РЕЖИМ DRY-RUN ВКЛЮЧЕН] — сообщения в Telegram отправляться не будут, данные выводятся в терминал.\n")
+
     raw_signings = []
     raw_trades = []
     raw_transactions = []
@@ -615,9 +725,12 @@ async def main():
                 raw_injury_entries.append((name, reason, player_url))
 
             for name, reason, player_url in raw_injury_entries:
-                team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
-                current_injuries_top.append((name, team_abbr, reason, player_url))
-                print(f"  Топ-3: {name} ({team_abbr}), {reason}")
+                if player_url:
+                    team_abbr, photo_url = await get_player_profile_details(page, player_url, name)
+                else:
+                    team_abbr, photo_url = "UNK", None
+                current_injuries_top.append((name, team_abbr, reason, player_url, photo_url))
+                print(f"  Топ-3: {name} ({team_abbr}), {reason}, фото найдено: {bool(photo_url)}")
 
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
@@ -628,7 +741,7 @@ async def main():
                 for name in sorted(recovered):
                     player_url = prev_snapshot[name].get("url", "")
                     if player_url:
-                        team_abbr = await get_team_from_profile(page, player_url)
+                        team_abbr, _ = await get_player_profile_details(page, player_url, name)
                         try:
                             rus_name = GoogleTranslator(source='en', target='ru').translate(name)
                         except Exception:
@@ -682,6 +795,7 @@ async def main():
 
     cache = load_cache()
     all_new = []
+    injury_posts = []
 
     # --- ПОДПИСАНИЯ ---
     last_sign_date = cache["signings"].get("last_date", "")
@@ -814,18 +928,20 @@ async def main():
         if is_first_run:
             print("Первый запуск снапшота травм: публикаций нет, снапшот создаётся.")
         else:
-            for name, team_abbr, reason, _ in current_injuries_top:
+            for name, team_abbr, reason, _, photo_url in current_injuries_top:
                 if name not in prev_names:
                     try:
                         rus_name = GoogleTranslator(source='en', target='ru').translate(name)
                     except Exception:
                         rus_name = name
-                    all_new.append(f"❌ {rus_name} ({team_abbr}), {reason}")
+                    caption = f"❌ {rus_name} ({team_abbr}), {reason}"
                     print(f"  Новая травма: {name}")
+                    injury_posts.append((caption, photo_url))
+
             all_new.extend(recovered_lines)
 
         new_snapshot = {}
-        top3_dict = {n: (t, r, u) for n, t, r, u in current_injuries_top}
+        top3_dict = {n: (t, r, u) for n, t, r, u, _ in current_injuries_top}
         for name in current_injury_names_all:
             if name in top3_dict:
                 team, reason, url = top3_dict[name]
@@ -864,13 +980,30 @@ async def main():
     save_cache(cache)
     commit_cache()
 
-    if not all_new:
-        print("Новых событий нет. Скрипт завершен без отправки.")
-        return
+    # --- СИМУЛЯЦИЯ ДЛЯ ТЕСТА (ЕСЛИ ТРАВМ НЕТ В ДАННЫЙ МОМЕНТ) ---
+    if DRY_RUN and not injury_posts and current_injuries_top:
+        print("\nℹ️ [DRY RUN] Новых травм в этот запуск не обнаружено. Демонстрируем пост для первой травмы из топа:")
+        demo_name, demo_team, demo_reason, _, demo_photo = current_injuries_top[0]
+        try:
+            demo_rus = GoogleTranslator(source='en', target='ru').translate(demo_name)
+        except Exception:
+            demo_rus = demo_name
+        demo_caption = f"❌ {demo_rus} ({demo_team}), {demo_reason}"
+        send_photo_to_telegram(demo_photo, demo_caption)
 
-    message = "\n\n".join(all_new)
-    send_to_telegram(message)
-    print(f"Отправлено {len(all_new)} новых записей в Telegram.")
+    # --- ОТПРАВКА ТРАВМ (ОТДЕЛЬНЫЕ ПОСТЫ С ФОТО) ---
+    for caption, photo_url in injury_posts:
+        send_photo_to_telegram(photo_url, caption)
+        await asyncio.sleep(1)
+
+    # --- ОТПРАВКА ОСТАЛЬНЫХ СОБЫТИЙ (ОБЩИМ ТЕКСТОМ) ---
+    if all_new:
+        message = "\n\n".join(all_new)
+        send_to_telegram(message)
+        print(f"Отправлено {len(all_new)} текстовых записей.")
+
+    if not injury_posts and not all_new and not DRY_RUN:
+        print("Новых событий нет. Скрипт завершен без отправки.")
 
 
 if __name__ == "__main__":
