@@ -123,6 +123,10 @@ CACHE_FILE = "last_data_cache.json"
 TRANSACTIONS_CACHE_FILE = "transactions_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 INJURIES_MIN_COUNT = 50
+PLAYER_PROFILE_CACHE_FILE = "player_profile_cache.json"
+PROFILE_CONCURRENCY = 4
+PROFILE_PAGE_TIMEOUT = 30000
+TG_POST_DELAY = 1.0
 
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
@@ -327,75 +331,72 @@ def save_injuries_snapshot(snapshot):
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
 
+def _git_stage(filepath):
+    if DRY_RUN or os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    try:
+        subprocess.run(["git", "add", filepath], check=True)
+    except Exception as e:
+        print(f"  Ошибка git add {filepath}: {e}")
+
+
 def commit_file(filepath, message):
+    '''Сохраняем файл и только добавляем его в staging. Push выполняется один раз в конце.'''
     if DRY_RUN:
         print(f"  [DRY RUN] Пропуск сохранения/коммита {filepath}")
         return
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", filepath], check=True)
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", f"{message} [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-                print(f"  {filepath} сохранён.")
-        except Exception as e:
-            print(f"  Ошибка сохранения {filepath}: {e}")
-
-
-def load_cache():
-    default = {
-        "signings": {"last_date": "", "last_id": ""},
-        "trades": {"last_date": "", "last_id": ""},
-        "waivers": {"seen": []}
-    }
-    if not os.path.exists(CACHE_FILE):
-        return default
-    try:
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return default
-    for key in ("signings", "trades"):
-        if not isinstance(data.get(key), dict):
-            data[key] = {"last_date": "", "last_id": ""}
-    data.pop("injuries", None)
-    data.pop("transactions", None)
-    if not isinstance(data.get("waivers"), dict):
-        data["waivers"] = {"seen": []}
-    elif "seen" not in data["waivers"]:
-        data["waivers"]["seen"] = []
-    for k, v in default.items():
-        if k not in data:
-            data[k] = v
-    return data
-
-
-def save_cache(cache):
-    if DRY_RUN:
-        return
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
+    _git_stage(filepath)
 
 
 def commit_cache():
     if DRY_RUN:
         print("  [DRY RUN] Пропуск git-коммита кэша.")
         return
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", CACHE_FILE], check=True)
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-            if status.stdout.strip():
-                subprocess.run(["git", "commit", "-m", "Обновление кэша [skip ci]"], check=True)
-                subprocess.run(["git", "push"], check=True)
-                print("Кэш сохранён.")
-        except Exception as e:
-            print(f"Ошибка кэша: {e}")
+    _git_stage(CACHE_FILE)
+
+
+def commit_all_changes():
+    '''Один git commit/push вместо отдельных push за один запуск.'''
+    if DRY_RUN or os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    try:
+        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True)
+        if not status.stdout.strip():
+            return
+        subprocess.run(["git", "commit", "-m", "Обновление кэшей PuckPedia [skip ci]"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print("Кэши сохранены одним git commit/push.")
+    except Exception as e:
+        print(f"Ошибка финального git commit/push: {e}")
+
+
+def load_player_profile_cache():
+    if not os.path.exists(PLAYER_PROFILE_CACHE_FILE):
+        return {}
+    try:
+        with open(PLAYER_PROFILE_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_player_profile_cache(cache):
+    if DRY_RUN:
+        return
+    tmp = PLAYER_PROFILE_CACHE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, PLAYER_PROFILE_CACHE_FILE)
+
+
+def player_name_from_url(player_url):
+    if not player_url:
+        return ""
+    slug = player_url.rstrip("/").split("/")[-1]
+    return re.sub(r"[-_]+", " ", slug).strip()
 
 
 def extract_player_name(line):
@@ -609,24 +610,23 @@ async def fetch_api(page, url, label):
 
 
 async def get_player_profile_details(page, player_url, player_name="", cache_dict=None):
-    """
-    Открывает профиль игрока и извлекает:
-    1. Команду игрока
-    2. Прямую ссылку на фото игрока
-    """
+    '''Получает команду и фото игрока. Кэш может жить между запусками.'''
     if not player_url:
         return "UNK", None
 
     if cache_dict is not None and player_url in cache_dict:
-        return cache_dict[player_url]
+        cached = cache_dict[player_url]
+        if isinstance(cached, dict) and cached.get("photo"):
+            return cached.get("team", "UNK"), cached.get("photo")
+        if isinstance(cached, (list, tuple)) and len(cached) >= 2 and cached[1]:
+            return cached[0], cached[1]
 
     target_url = player_url if player_url.startswith("http") else f"https://puckpedia.com{player_url}"
+    player_name = player_name or player_name_from_url(player_url)
 
     try:
-        await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(1.2)
+        await page.goto(target_url, wait_until="domcontentloaded", timeout=PROFILE_PAGE_TIMEOUT)
 
-        # 1. Извлекаем команду
         team_abbr = "UNK"
         all_team_links = await page.eval_on_selector_all(
             "a[href*='/team/']",
@@ -635,13 +635,11 @@ async def get_player_profile_details(page, player_url, player_name="", cache_dic
         if len(all_team_links) > NAV_LINKS_COUNT:
             team_abbr = get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
 
-        # 2. Извлекаем фото игрока
         photo_url = await page.evaluate('''([pName]) => {
             const imgs = Array.from(document.querySelectorAll('img'));
             const cleanName = (pName || '').toLowerCase().trim();
             const parts = cleanName.split(/\\s+/).filter(p => p.length > 2);
 
-            // А. Приоритет: фото с именем игрока в alt или title
             if (parts.length > 0) {
                 const byAlt = imgs.find(img => {
                     const alt = (img.alt || '').toLowerCase();
@@ -653,171 +651,226 @@ async def get_player_profile_details(page, player_url, player_name="", cache_dic
                 if (byAlt && byAlt.src) return byAlt.src;
             }
 
-            // Б. Селекторы карточки профиля
             const selectors = [
-                '.player-headshot img',
-                '.player-header img',
-                '.player-photo img',
-                '.player-image img',
-                '.bio-pic img',
-                '.headshot img'
+                '.player-headshot img', '.player-header img', '.player-photo img',
+                '.player-image img', '.bio-pic img', '.headshot img'
             ];
             for (const sel of selectors) {
                 const el = document.querySelector(sel);
-                if (el && el.src && !el.src.includes('logo') && !el.src.includes('default') && !el.src.includes('silhouette')) {
-                    return el.src;
-                }
+                if (el && el.src && !el.src.includes('logo') && !el.src.includes('default') && !el.src.includes('silhouette')) return el.src;
             }
 
-            // В. Картинки баз данных NHL
             const nhlImg = imgs.find(img => {
                 const src = (img.src || '').toLowerCase();
-                return (src.includes('nhle.com') || src.includes('bamcontent.com') || src.includes('/headshot') || src.includes('/mugs/')) &&
-                       !src.includes('logo') && !src.includes('flag');
+                return (src.includes('nhle.com') || src.includes('bamcontent.com') || src.includes('/headshot') || src.includes('/mugs/')) && !src.includes('logo') && !src.includes('flag');
             });
             if (nhlImg && nhlImg.src) return nhlImg.src;
 
-            // Г. Запасной вариант с /player
             const generic = imgs.find(img => {
                 const src = (img.src || '').toLowerCase();
-                return src.includes('/player') && !src.includes('logo') && !src.includes('default');
+                return src.includes('/player') && !src.includes('logo') && !src.includes('default') && !src.includes('silhouette');
             });
             return generic ? generic.src : null;
         }''', [player_name])
 
+        if not photo_url:
+            await asyncio.sleep(0.25)
+            photo_url = await page.evaluate('''() => {
+                const imgs = Array.from(document.querySelectorAll('img'));
+                const good = imgs.find(img => {
+                    const src = (img.currentSrc || img.src || '').toLowerCase();
+                    return src && !src.includes('logo') && !src.includes('flag') && !src.includes('icon') &&
+                           !src.includes('default') && !src.includes('silhouette') &&
+                           (src.includes('nhle.com') || src.includes('bamcontent.com') || src.includes('/headshot') || src.includes('/mugs/') || src.includes('/player'));
+                });
+                return good ? (good.currentSrc || good.src) : null;
+            }''')
+
         if photo_url and photo_url.startswith("/"):
             photo_url = f"https://puckpedia.com{photo_url}"
 
-        res = (team_abbr, photo_url)
+        result = {"team": team_abbr, "photo": photo_url}
         if cache_dict is not None:
-            cache_dict[player_url] = res
-        return res
+            cache_dict[player_url] = result
+        return team_abbr, photo_url
     except Exception as e:
         print(f"  Ошибка чтения профиля {target_url}: {e}")
         return "UNK", None
+
+
+async def resolve_profiles(context, jobs, profile_cache):
+    '''Параллельно получает только отсутствующие в постоянном кэше профили.'''
+    unique = {}
+    for player_url, player_name in jobs:
+        if player_url and player_url not in profile_cache:
+            unique[player_url] = player_name or player_name_from_url(player_url)
+
+    if not unique:
+        return
+
+    sem = asyncio.Semaphore(PROFILE_CONCURRENCY)
+    total = len(unique)
+    done = 0
+
+    async def worker(player_url, player_name):
+        nonlocal done
+        async with sem:
+            page = await context.new_page()
+            try:
+                team, photo = await get_player_profile_details(page, player_url, player_name, profile_cache)
+                done += 1
+                print(f"  Фото {done}/{total}: {player_name} -> {'OK' if photo else 'НЕТ'}")
+            finally:
+                await page.close()
+
+    await asyncio.gather(*(worker(url, name) for url, name in unique.items()))
+
+
+def profile_result(profile_cache, player_url):
+    if not player_url:
+        return "UNK", None
+    value = profile_cache.get(player_url)
+    if isinstance(value, dict):
+        return value.get("team", "UNK"), value.get("photo")
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        return value[0], value[1]
+    return "UNK", None
+
+
+async def fetch_page_data(context, url, api_url, label):
+    page = await context.new_page()
+    try:
+        print(f"Открываем {label}...")
+        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        return await fetch_api(page, api_url, label)
+    finally:
+        await page.close()
+
+
+async def load_table_page(context, url, selector, label):
+    page = await context.new_page()
+    try:
+        print(f"Открываем страницу {label}...")
+        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        try:
+            await page.locator(selector).first.wait_for(state="attached", timeout=5000)
+        except Exception:
+            pass
+        return page
+    except Exception:
+        await page.close()
+        raise
 
 
 async def main():
     if DRY_RUN:
         print("\n🚀 [ТЕСТОВЫЙ РЕЖИМ DRY-RUN ВКЛЮЧЕН] — сообщения в Telegram отправляться не будут, данные выводятся в терминал.\n")
 
-    raw_signings = []
-    raw_trades = []
-    raw_transactions = []
+    t0 = asyncio.get_running_loop().time()
+    raw_signings, raw_trades, raw_transactions = [], [], []
     current_waivers_data = []
-    current_injury_names_all = set()
-    current_injury_urls = {}
-    current_injuries_top = []
+    current_injury_names_all, current_injury_urls = set(), {}
+    raw_injury_entries = []
     injuries_loaded_ok = False
-    prev_snapshot = {}
-    prev_names = set()
+    prev_snapshot, prev_names = {}, set()
+    all_posts_to_send = []
+    profile_cache = load_player_profile_cache()
+    profile_jobs = []
+    translation_cache = {}
 
-    # Кэш внутри запуска, чтобы не делать лишних запросов страниц
-    runtime_profile_cache = {}
+    def translate_cached(text, kind="name"):
+        key = f"{kind}:{text}"
+        if key in translation_cache:
+            return translation_cache[key]
+        try:
+            value = GoogleTranslator(source='en', target='ru').translate(text)
+        except Exception:
+            value = text
+        translation_cache[key] = value
+        return value
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
-        page = await context.new_page()
 
-        # --- 1. ПОДПИСАНИЯ ---
-        print("Открываем страницу подписаний...")
-        await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(10)
-        raw_signings = await fetch_api(page, SIGNINGS_API, "Подписания")
+        api_start = asyncio.get_running_loop().time()
+        raw_signings, raw_trades, raw_transactions = await asyncio.gather(
+            fetch_page_data(context, "https://puckpedia.com/signings", SIGNINGS_API, "Подписания"),
+            fetch_page_data(context, "https://puckpedia.com/trades", TRADES_API, "Трейды"),
+            fetch_page_data(context, "https://puckpedia.com/transactions?transaction_type=roster", TRANSACTIONS_API, "Транзакции"),
+        )
+        print(f"⏱ API-блок: {asyncio.get_running_loop().time() - api_start:.2f} сек.")
 
-        # --- 2. ТРЕЙДЫ ---
-        print("Открываем страницу трейдов...")
-        await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(10)
-        raw_trades = await fetch_api(page, TRADES_API, "Трейды")
+        injury_page, waiver_page = await asyncio.gather(
+            load_table_page(context, "https://puckpedia.com/injuries", "tr:has(a.pp_link[href*='/player/'])", "травм"),
+            load_table_page(context, "https://puckpedia.com/waiver-wire", "tr", "уэйвера"),
+        )
 
-        # --- 3. ТРАНЗАКЦИИ ---
-        print("Открываем страницу транзакций...")
-        await page.goto("https://puckpedia.com/transactions?transaction_type=roster", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(10)
-        raw_transactions = await fetch_api(page, TRANSACTIONS_API, "Транзакции")
-
-        # --- 4. ТРАВМЫ ---
-        print("Открываем страницу травм...")
-        await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(2)
-
-        all_player_rows = await page.query_selector_all("tr:has(a.pp_link[href*='/player/'])")
-        print(f"  Строк с игроками: {len(all_player_rows)}")
-
-        for row in all_player_rows:
-            cells = await row.query_selector_all("td")
-            if not cells:
-                continue
-            name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
-            if not name_link:
-                continue
-            raw_name = format_name((await name_link.inner_text()).strip())
-            player_url = await name_link.get_attribute("href")
-            if raw_name and len(raw_name) > 2:
-                current_injury_names_all.add(raw_name)
-                if player_url:
-                    current_injury_urls[raw_name] = player_url
-
-        print(f"  Всего травмированных: {len(current_injury_names_all)}")
-
-        if len(current_injury_names_all) >= INJURIES_MIN_COUNT:
-            injuries_loaded_ok = True
-            raw_injury_entries = []
-            for row in all_player_rows[:3]:
+        try:
+            all_player_rows = await injury_page.query_selector_all("tr:has(a.pp_link[href*='/player/'])")
+            print(f"  Строк с игроками: {len(all_player_rows)}")
+            for row in all_player_rows:
                 cells = await row.query_selector_all("td")
                 if not cells:
                     continue
                 name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
                 if not name_link:
                     continue
+                raw_name = format_name((await name_link.inner_text()).strip())
                 player_url = await name_link.get_attribute("href")
-                name = format_name((await name_link.inner_text()).strip())
-                reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
-                raw_injury_entries.append((name, reason, player_url))
+                if raw_name and len(raw_name) > 2:
+                    current_injury_names_all.add(raw_name)
+                    if player_url:
+                        current_injury_urls[raw_name] = player_url
 
-            for name, reason, player_url in raw_injury_entries:
-                team_abbr, photo_url = await get_player_profile_details(page, player_url, name, runtime_profile_cache)
-                current_injuries_top.append((name, team_abbr, reason, player_url, photo_url))
-                print(f"  Топ-3: {name} ({team_abbr}), {reason}, фото: {bool(photo_url)}")
+            print(f"  Всего травмированных: {len(current_injury_names_all)}")
+            if len(current_injury_names_all) >= INJURIES_MIN_COUNT:
+                injuries_loaded_ok = True
+                for row in all_player_rows[:3]:
+                    cells = await row.query_selector_all("td")
+                    if not cells:
+                        continue
+                    name_link = await cells[0].query_selector("a.pp_link[href*='/player/']")
+                    if not name_link:
+                        continue
+                    player_url = await name_link.get_attribute("href")
+                    name = format_name((await name_link.inner_text()).strip())
+                    reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
+                    raw_injury_entries.append((name, reason, player_url))
+                    if player_url:
+                        profile_jobs.append((player_url, name))
+                prev_snapshot = load_injuries_snapshot()
+                prev_names = set(prev_snapshot.keys())
+            else:
+                print(f"  ЗАЩИТА: список травм мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок пропускается.")
+                prev_snapshot = load_injuries_snapshot()
+                prev_names = set(prev_snapshot.keys())
+        finally:
+            await injury_page.close()
 
-            prev_snapshot = load_injuries_snapshot()
-            prev_names = set(prev_snapshot.keys())
-        else:
-            print(f"  ЗАЩИТА: список травм мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок пропускается.")
-            prev_snapshot = load_injuries_snapshot()
-            prev_names = set(prev_snapshot.keys())
-
-        # --- 5. УЭЙВЕР ---
-        print("Открываем страницу уэйвера...")
-        await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(2)
-        rows = await page.query_selector_all("tr")
-        count = 0
-        for row in rows:
-            cells = await row.query_selector_all("td")
-            if len(cells) >= 3:
-                name_link = await cells[0].query_selector("a[href*='/player/']")
-                player_url = await name_link.get_attribute("href") if name_link else ""
-                name = format_name((await cells[0].inner_text()).strip())
-                team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
-                team_abbr = get_team_abbr_by_slug(team_full)
-                res = (await cells[2].inner_text()).strip().lower()
-                waiver_text = WAIVER_MAPPING.get(res, res)
-                emoji = "⬆️" if res == "claimed" else ("⬅️" if res == "cleared" else "➡️")
-                line = f"{emoji} {name} ({team_abbr}) {waiver_text}"
-
-                current_waivers_data.append({
-                    "line": line,
-                    "player_name": name,
-                    "player_url": player_url
-                })
-                count += 1
-                if count >= 3:
-                    break
+        try:
+            rows = await waiver_page.query_selector_all("tr")
+            count = 0
+            for row in rows:
+                cells = await row.query_selector_all("td")
+                if len(cells) >= 3:
+                    name_link = await cells[0].query_selector("a[href*='/player/']")
+                    player_url = await name_link.get_attribute("href") if name_link else ""
+                    name = format_name((await cells[0].inner_text()).strip())
+                    team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
+                    team_abbr = get_team_abbr_by_slug(team_full)
+                    res = (await cells[2].inner_text()).strip().lower()
+                    waiver_text = WAIVER_MAPPING.get(res, res)
+                    emoji = "⬆️" if res == "claimed" else ("⬅️" if res == "cleared" else "➡️")
+                    line = f"{emoji} {name} ({team_abbr}) {waiver_text}"
+                    current_waivers_data.append({"line": line, "player_name": name, "player_url": player_url})
+                    count += 1
+                    if count >= 3:
+                        break
+        finally:
+            await waiver_page.close()
 
         if not raw_signings:
             print("Подписания не загрузились. Операция прервана.")
@@ -829,20 +882,15 @@ async def main():
             return
 
         cache = load_cache()
-        all_posts_to_send = []
 
-        # =========================================================================
-        # 1. ОБРАБОТКА ПОДПИСАНИЙ
-        # =========================================================================
+        # 1. ПОДПИСАНИЯ
         last_sign_date = cache["signings"].get("last_date", "")
         last_sign_id = cache["signings"].get("last_id", "")
         new_signings_raw = []
         for item in raw_signings:
             item_date = str(item.get("sign_date", "") or "")
             item_id = str(item.get("cid", "") or item.get("id", "") or "")
-            if item_date > last_sign_date:
-                new_signings_raw.append(item)
-            elif item_date == last_sign_date and item_id and item_id != last_sign_id:
+            if item_date > last_sign_date or (item_date == last_sign_date and item_id and item_id != last_sign_id):
                 new_signings_raw.append(item)
             else:
                 break
@@ -865,20 +913,10 @@ async def main():
                 years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
             except Exception:
                 years = 1
-            sign_city = str(item.get('sign_city', '')).strip()
-            sign_team_name = str(item.get('sign_team_name', '')).strip()
-            team_name = f"{sign_city} {sign_team_name}".strip()
+            team_name = f"{str(item.get('sign_city', '')).strip()} {str(item.get('sign_team_name', '')).strip()}".strip()
             raw_type = str(item.get('type_name', '')).lower()
-            if "extension" in raw_type:
-                ctype = "продлил контракт"
-            else:
-                ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-
-            try:
-                rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-            except Exception:
-                rus_name = name
-
+            ctype = "продлил контракт" if "extension" in raw_type else ("подписал контракт новичка" if "ELC" in lvl else "подписал контракт")
+            rus_name = translate_cached(name, "name")
             caption = f"📝 {rus_name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
 
             player_url = item.get('player_url') or item.get('url') or ""
@@ -889,26 +927,22 @@ async def main():
                 else:
                     slug = re.sub(r'[^a-z0-9\-]+', '', f"{p_fn}-{p_ln}".lower().replace(' ', '-'))
                     player_url = f"/player/{slug}"
-
-            _, photo_url = await get_player_profile_details(page, player_url, name, runtime_profile_cache)
-            all_posts_to_send.append({"caption": caption, "photo": photo_url})
+            all_posts_to_send.append({"caption": caption, "photo": None, "profile_url": player_url})
+            if player_url:
+                profile_jobs.append((player_url, name))
 
         if raw_signings:
             cache["signings"]["last_date"] = str(raw_signings[0].get("sign_date", "") or "")
             cache["signings"]["last_id"] = str(raw_signings[0].get("cid", "") or raw_signings[0].get("id", "") or "")
 
-        # =========================================================================
-        # 2. ОБРАБОТКА ТРЕЙДОВ
-        # =========================================================================
+        # 2. ТРЕЙДЫ
         last_trade_date = cache["trades"].get("last_date", "")
         last_trade_id = cache["trades"].get("last_id", "")
         new_trades_raw = []
         for item in raw_trades:
             item_date = str(item.get("trade_date", "") or "")
             item_id = str(item.get("trade_id", "") or "")
-            if item_date > last_trade_date:
-                new_trades_raw.append(item)
-            elif item_date == last_trade_date and item_id and item_id != last_trade_id:
+            if item_date > last_trade_date or (item_date == last_trade_date and item_id and item_id != last_trade_id):
                 new_trades_raw.append(item)
             else:
                 break
@@ -921,29 +955,23 @@ async def main():
             if not text or len(text) < 20:
                 continue
             translated = translate_trade(text)
-            if translated not in seen_trades and "The ID of this channel" not in translated:
-                seen_trades.add(translated)
-                caption = f"🔄 {translated}"
-
-                photo_url = None
-                m = re.search(r'href=["\'](/player/[^"\']+)["\']', raw_html)
-                if m:
-                    player_url = m.group(1)
-                    _, photo_url = await get_player_profile_details(page, player_url, "", runtime_profile_cache)
-
-                all_posts_to_send.append({"caption": caption, "photo": photo_url})
+            if translated in seen_trades or "The ID of this channel" in translated:
+                continue
+            seen_trades.add(translated)
+            player_urls = re.findall(r'href=["\'](/player/[^"\']+)["\']', raw_html)
+            player_url = player_urls[0] if player_urls else ""
+            all_posts_to_send.append({"caption": f"🔄 {translated}", "photo": None, "profile_url": player_url})
+            if player_url:
+                profile_jobs.append((player_url, player_name_from_url(player_url)))
 
         if raw_trades:
             cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
             cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
 
-        # =========================================================================
-        # 3. ОБРАБОТКА ТРАНЗАКЦИЙ
-        # =========================================================================
+        # 3. ТРАНЗАКЦИИ
         tx_cache = load_transactions_cache()
         last_tx_date = tx_cache.get("last_date", "")
         last_tx_id = tx_cache.get("last_id", "")
-
         all_tx_lines_for_recent = []
         for item in raw_transactions[:5]:
             raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
@@ -955,9 +983,7 @@ async def main():
         for item in raw_transactions:
             item_date = str(item.get("sort_date", "") or item.get("transaction_date", "") or "")
             item_id = str(item.get("transaction_id", "") or item.get("id", "") or "")
-            if item_date > last_tx_date:
-                new_transactions_raw.append(item)
-            elif item_date == last_tx_date and item_id and item_id != last_tx_id:
+            if item_date > last_tx_date or (item_date == last_tx_date and item_id and item_id != last_tx_id):
                 new_transactions_raw.append(item)
             else:
                 break
@@ -969,176 +995,122 @@ async def main():
             if not raw_text or len(raw_text) < 10:
                 continue
             translated = translate_transaction(raw_text)
-            if translated not in seen_tx:
-                seen_tx.add(translated)
-                caption = f"🏒 {translated}"
-
-                photo_url = None
-                m = re.search(r'href=["\'](/player/[^"\']+)["\']', raw_text)
-                if m:
-                    player_url = m.group(1)
-                    _, photo_url = await get_player_profile_details(page, player_url, "", runtime_profile_cache)
-
-                all_posts_to_send.append({"caption": caption, "photo": photo_url})
+            if translated in seen_tx:
+                continue
+            seen_tx.add(translated)
+            player_urls = re.findall(r'href=["\'](/player/[^"\']+)["\']', raw_text)
+            player_url = player_urls[0] if player_urls else ""
+            all_posts_to_send.append({"caption": f"🏒 {translated}", "photo": None, "profile_url": player_url})
+            if player_url:
+                profile_jobs.append((player_url, player_name_from_url(player_url)))
 
         if raw_transactions:
             first = raw_transactions[0]
             tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
             tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
-
         save_transactions_cache(tx_cache)
         commit_file(TRANSACTIONS_CACHE_FILE, "Обновление кэша транзакций")
 
-        # =========================================================================
-        # 4. ОБРАБОТКА ТРАВМ И ВЫЗДОРОВЛЕНИЙ
-        # =========================================================================
+        # 4. ТРАВМЫ / ВЫЗДОРОВЛЕНИЯ
         if injuries_loaded_ok:
-            is_first_run = len(prev_snapshot) == 0
-            if is_first_run:
+            recovered = prev_names - current_injury_names_all if prev_names else set()
+            for name in recovered:
+                player_url = prev_snapshot.get(name, {}).get("url", "")
+                if player_url:
+                    profile_jobs.append((player_url, name))
+
+        # 5. УЭЙВЕРЫ
+        seen_waiver_names = set(cache["waivers"].get("seen", []))
+        new_waiver_names = []
+        for w_item in current_waivers_data:
+            player_name = extract_player_name(w_item["line"])
+            player_url = w_item["player_url"]
+            if player_name and player_name not in seen_waiver_names:
+                rus_name = translate_cached(player_name, "name")
+                translated_line = w_item["line"].replace(player_name, rus_name)
+                all_posts_to_send.append({"caption": translated_line, "photo": None, "profile_url": player_url})
+                if player_url:
+                    profile_jobs.append((player_url, player_name))
+                new_waiver_names.append(player_name)
+
+        print(f"Новых уэйверов: {len(new_waiver_names)}")
+        cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
+
+        # ВСЕ profile.goto теперь выполняются параллельно и только для новых URL.
+        profile_start = asyncio.get_running_loop().time()
+        await resolve_profiles(context, profile_jobs, profile_cache)
+        print(f"⏱ Профили/фото: {asyncio.get_running_loop().time() - profile_start:.2f} сек. ({len(set(u for u, _ in profile_jobs if u))} уникальных URL)")
+
+        # Фото привязывается к тому же объекту, что и текст.
+        for post in all_posts_to_send:
+            url = post.pop("profile_url", "")
+            _, post["photo"] = profile_result(profile_cache, url)
+
+        # Новые травмы: строго те же top-3, что и в исходном парсере.
+        if injuries_loaded_ok:
+            if not prev_names:
                 print("Первый запуск снапшота травм: публикаций нет, снапшот создаётся.")
             else:
-                # Новые травмы
-                for name, team_abbr, reason, player_url, photo_url in current_injuries_top:
+                for name, reason, player_url in raw_injury_entries:
                     if name not in prev_names:
-                        try:
-                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                        except Exception:
-                            rus_name = name
-                        caption = f"❌ {rus_name} ({team_abbr}), {reason}"
+                        team, photo = profile_result(profile_cache, player_url)
+                        rus_name = translate_cached(name, "name")
+                        all_posts_to_send.append({"caption": f"❌ {rus_name} ({team}), {reason}", "photo": photo})
                         print(f"  Новая травма: {name}")
-                        all_posts_to_send.append({"caption": caption, "photo": photo_url})
 
-                # Выздоровления
                 recovered = prev_names - current_injury_names_all
-                if recovered and len(prev_names) > 0:
+                if recovered:
                     print(f"  Выздоровевших: {len(recovered)}")
                     for name in sorted(recovered):
-                        player_url = prev_snapshot[name].get("url", "")
-                        team_abbr, rec_photo = await get_player_profile_details(page, player_url, name, runtime_profile_cache)
-                        try:
-                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                        except Exception:
-                            rus_name = name
-
-                        line = (f"✅ {rus_name} ({team_abbr}) активирован из списка травмированных"
-                                if team_abbr and team_abbr != "UNK"
+                        player_url = prev_snapshot.get(name, {}).get("url", "")
+                        team, photo = profile_result(profile_cache, player_url)
+                        rus_name = translate_cached(name, "name")
+                        line = (f"✅ {rus_name} ({team}) активирован из списка травмированных"
+                                if team and team != "UNK"
                                 else f"✅ {rus_name} активирован из списка травмированных")
-
-                        all_posts_to_send.append({"caption": line, "photo": rec_photo})
+                        all_posts_to_send.append({"caption": line, "photo": photo})
 
             new_snapshot = {}
-            top3_dict = {n: (t, r, u) for n, t, r, u, _ in current_injuries_top}
+            top3_dict = {n: (r, u) for n, r, u in raw_injury_entries}
             for name in current_injury_names_all:
                 if name in top3_dict:
-                    team, reason, url = top3_dict[name]
+                    reason, url = top3_dict[name]
+                    team, _ = profile_result(profile_cache, url)
                     new_snapshot[name] = {"team": team, "reason": reason, "url": url or ""}
                 elif name in prev_snapshot:
                     new_snapshot[name] = prev_snapshot[name]
                 else:
                     new_snapshot[name] = {"team": "UNK", "reason": "", "url": current_injury_urls.get(name, "")}
-
             save_injuries_snapshot(new_snapshot)
             commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
             print(f"Снапшот травм обновлён: {len(new_snapshot)} игроков.")
         else:
             print("Снапшот травм не обновляется.")
 
-        # =========================================================================
-        # 5. ОБРАБОТКА УЭЙВЕРА (ДРАФТ ОТКАЗОВ)
-        # =========================================================================
-        seen_waiver_names = set(cache["waivers"].get("seen", []))
-        new_waiver_names = []
-
-        for w_item in current_waivers_data:
-            line = w_item["line"]
-            player_name = extract_player_name(line)
-            player_url = w_item["player_url"]
-
-            if player_name and player_name not in seen_waiver_names:
-                try:
-                    rus_name = GoogleTranslator(source='en', target='ru').translate(player_name)
-                    translated_line = line.replace(player_name, rus_name)
-                except Exception:
-                    translated_line = line
-
-                _, photo_url = await get_player_profile_details(page, player_url, player_name, runtime_profile_cache)
-                all_posts_to_send.append({"caption": translated_line, "photo": photo_url})
-                new_waiver_names.append(player_name)
-
-        print(f"Новых уэйверов: {len(new_waiver_names)}")
-        cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
-
-        # Сохраняем состояние кэша
         save_cache(cache)
         commit_cache()
+        save_player_profile_cache(profile_cache)
+        commit_file(PLAYER_PROFILE_CACHE_FILE, "Обновление кэша профилей")
 
-        # =========================================================================
-        # СИМУЛЯЦИЯ ДЛЯ ТЕСТА В ТЕРМИНАЛЕ
-        # =========================================================================
         if DRY_RUN and not all_posts_to_send:
-            print("\nℹ️ [DRY RUN] Новых событий прямо сейчас нет. Демонстрируем по одному посту из каждой страницы:")
-
-            # 1. Пример подписания
-            if raw_signings:
-                s_item = raw_signings[0]
-                s_name = f"{s_item.get('p_fn', '')} {s_item.get('p_ln', '')}".strip()
-                s_url = s_item.get('player_url') or f"/player/{s_name.lower().replace(' ', '-')}"
-                _, s_photo = await get_player_profile_details(page, s_url, s_name, runtime_profile_cache)
-                try:
-                    s_rus = GoogleTranslator(source='en', target='ru').translate(s_name)
-                except Exception:
-                    s_rus = s_name
-                send_photo_to_telegram(s_photo, f"📝 [ТЕСТ: Подписание] {s_rus} подписал контракт")
-
-            # 2. Пример трейда
-            if raw_trades:
-                t_item = raw_trades[0]
-                t_raw = str(t_item.get('details', '') or '')
-                t_text = translate_trade(str(t_item.get('details_nolinks', '') or t_raw))
-                t_photo = None
-                tm = re.search(r'href=["\'](/player/[^"\']+)["\']', t_raw)
-                if tm:
-                    _, t_photo = await get_player_profile_details(page, tm.group(1), "", runtime_profile_cache)
-                send_photo_to_telegram(t_photo, f"🔄 [ТЕСТ: Трейд] {t_text}")
-
-            # 3. Пример транзакции
-            if raw_transactions:
-                tx_item = raw_transactions[0]
-                tx_raw = str(tx_item.get('details', '') or '')
-                tx_text = translate_transaction(tx_raw)
-                tx_photo = None
-                tx_m = re.search(r'href=["\'](/player/[^"\']+)["\']', tx_raw)
-                if tx_m:
-                    _, tx_photo = await get_player_profile_details(page, tx_m.group(1), "", runtime_profile_cache)
-                send_photo_to_telegram(tx_photo, f"🏒 [ТЕСТ: Транзакция] {tx_text}")
-
-            # 4. Пример травмы
-            if current_injuries_top:
-                i_name, i_team, i_reason, _, i_photo = current_injuries_top[0]
-                try:
-                    i_rus = GoogleTranslator(source='en', target='ru').translate(i_name)
-                except Exception:
-                    i_rus = i_name
-                send_photo_to_telegram(i_photo, f"❌ [ТЕСТ: Травма] {i_rus} ({i_team}), {i_reason}")
-
-            # 5. Пример драфта отказов
-            if current_waivers_data:
-                w_test = current_waivers_data[0]
-                _, w_photo = await get_player_profile_details(page, w_test['player_url'], w_test['player_name'], runtime_profile_cache)
-                send_photo_to_telegram(w_photo, f"⬆️ [ТЕСТ: Уэйвер] {w_test['line']}")
+            print("\nℹ️ [DRY RUN] Новых событий прямо сейчас нет.")
 
         await browser.close()
 
-    # =========================================================================
-    # ПУБЛИКАЦИЯ В TELEGRAM
-    # =========================================================================
+    # Каждый элемент — отдельный sendPhoto: фото и текст не смешиваются между событиями.
     if all_posts_to_send:
-        print(f"Отправка {len(all_posts_to_send)} постов с фото в Telegram...")
-        for post in all_posts_to_send:
-            send_photo_to_telegram(post["photo"], post["caption"])
-            await asyncio.sleep(1.2)  # Пауза между сообщениями для избежания лимитов Telegram API
+        print(f"Отправка {len(all_posts_to_send)} отдельных постов в Telegram...")
+        tg_start = asyncio.get_running_loop().time()
+        for idx, post in enumerate(all_posts_to_send, 1):
+            send_photo_to_telegram(post.get("photo"), post["caption"])
+            if idx < len(all_posts_to_send):
+                await asyncio.sleep(TG_POST_DELAY)
+        print(f"⏱ Telegram: {asyncio.get_running_loop().time() - tg_start:.2f} сек.")
     elif not DRY_RUN:
         print("Новых событий нет. Скрипт завершен без отправки.")
+
+    print(f"🏁 Общее время: {asyncio.get_running_loop().time() - t0:.2f} сек.")
+    commit_all_changes()
 
 
 if __name__ == "__main__":
