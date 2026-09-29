@@ -8,7 +8,15 @@ import json
 from playwright.async_api import async_playwright
 from deep_translator import GoogleTranslator
 
-# Режим тестирования: активируется через аргумент --dry-run или --test в терминале, либо переменную окружения DRY_RUN=true
+# ================= НАСТРОЙКИ TELEGRAM =================
+# Токен бота от @BotFather (например: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ")
+TG_TOKEN = os.environ.get("TG_TOKEN", "ВАШ_ТОКЕН_БОТА")
+
+# ID вашего канала или чата (например: "@channel_name" или "-1001234567890")
+TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "ВАШ_ID_КАНАЛА_ИЛИ_ЧАТА")
+# ======================================================
+
+# Флаг тестового режима: запускается через "python puck.py --test" или "python puck.py --dry-run"
 DRY_RUN = (
     "--dry-run" in sys.argv
     or "--test" in sys.argv
@@ -321,7 +329,7 @@ def save_injuries_snapshot(snapshot):
 
 def commit_file(filepath, message):
     if DRY_RUN:
-        print(f"  [DRY RUN] Пропуск git-коммита файла {filepath}")
+        print(f"  [DRY RUN] Пропуск сохранения/коммита {filepath}")
         return
     if os.environ.get("GITHUB_ACTIONS") == "true":
         try:
@@ -405,28 +413,34 @@ def get_rus_team_data(eng_name):
     return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
 
 
+# =========================================================================
+# ФУНКЦИИ ОТПРАВКИ СООБЩЕНИЙ В TELEGRAM
+# =========================================================================
+
 def send_to_telegram(text):
+    """Отправка обычного текстового сообщения"""
     if DRY_RUN:
         print("\n" + "=" * 25 + " [ТЕСТ: ТЕКСТОВЫЙ ПОСТ В TELEGRAM] " + "=" * 25)
         print(text)
         print("=" * 75 + "\n")
         return
 
-    token = os.environ.get("TG_TOKEN")
-    chat_id = os.environ.get("TG_CHAT_ID")
-    if not token or not chat_id:
+    if not TG_TOKEN or not TG_CHAT_ID or TG_TOKEN.startswith("ВАШ_"):
+        print("⚠️ Ошибка: TG_TOKEN или TG_CHAT_ID не настроены!")
         return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     max_len = 4000
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
         try:
-            requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
+            requests.post(url, data={"chat_id": TG_CHAT_ID, "text": part}, timeout=15)
         except Exception as e:
-            print(f"Ошибка отправки: {e}")
+            print(f"Ошибка отправки текста в Telegram: {e}")
 
 
 def send_photo_to_telegram(photo_url, caption):
+    """Отправка поста с фото и описанием (caption)"""
     if DRY_RUN:
         print("\n" + "=" * 25 + " [ТЕСТ: ПОСТ С ФОТО В TELEGRAM] " + "=" * 25)
         print(f"🖼️ ССЫЛКА НА ФОТО: {photo_url}")
@@ -434,24 +448,23 @@ def send_photo_to_telegram(photo_url, caption):
         print("=" * 74 + "\n")
         return
 
-    token = os.environ.get("TG_TOKEN")
-    chat_id = os.environ.get("TG_CHAT_ID")
-    if not token or not chat_id:
+    if not TG_TOKEN or not TG_CHAT_ID or TG_TOKEN.startswith("ВАШ_"):
+        print("⚠️ Ошибка: TG_TOKEN или TG_CHAT_ID не настроены!")
         return
 
-    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
 
-    # 1. Пробуем передать ссылку напрямую
+    # 1. Пробуем передать ссылку напрямую Telegram-серверам
     if photo_url:
         try:
-            data = {"chat_id": chat_id, "caption": caption, "photo": photo_url}
+            data = {"chat_id": TG_CHAT_ID, "caption": caption, "photo": photo_url}
             resp = requests.post(url, data=data, timeout=15)
             if resp.status_code == 200:
                 return
         except Exception:
             pass
 
-        # 2. Если по URL не получилось, скачиваем картинку и отправляем файлом
+        # 2. Если прямой URL заблокирован хостом, скачиваем сами и отправляем файлом
         try:
             img_resp = requests.get(
                 photo_url,
@@ -460,13 +473,13 @@ def send_photo_to_telegram(photo_url, caption):
             )
             if img_resp.status_code == 200:
                 files = {"photo": ("player.png", img_resp.content, "image/png")}
-                resp2 = requests.post(url, data={"chat_id": chat_id, "caption": caption}, files=files, timeout=15)
+                resp2 = requests.post(url, data={"chat_id": TG_CHAT_ID, "caption": caption}, files=files, timeout=15)
                 if resp2.status_code == 200:
                     return
         except Exception as e:
             print(f"Ошибка загрузки фото: {e}")
 
-    # 3. Если фото получить не удалось, отправляем текстом
+    # 3. Если фото получить не удалось, отправляем пост текстом
     send_to_telegram(caption)
 
 
@@ -595,15 +608,23 @@ async def fetch_api(page, url, label):
     return []
 
 
-async def get_player_profile_details(page, player_url, player_name=""):
+async def get_player_profile_details(page, player_url, player_name="", cache_dict=None):
     """
-    Открывает страницу профиля игрока и извлекает:
-    1. Аббревиатуру команды
+    Открывает профиль игрока и извлекает:
+    1. Команду игрока
     2. Прямую ссылку на фото игрока
     """
+    if not player_url:
+        return "UNK", None
+
+    if cache_dict is not None and player_url in cache_dict:
+        return cache_dict[player_url]
+
+    target_url = player_url if player_url.startswith("http") else f"https://puckpedia.com{player_url}"
+
     try:
-        await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(1.5)
+        await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(1.2)
 
         # 1. Извлекаем команду
         team_abbr = "UNK"
@@ -617,30 +638,62 @@ async def get_player_profile_details(page, player_url, player_name=""):
         # 2. Извлекаем фото игрока
         photo_url = await page.evaluate('''([pName]) => {
             const imgs = Array.from(document.querySelectorAll('img'));
-            const parts = (pName || '').toLowerCase().split(/\\s+/).filter(p => p.length > 2);
+            const cleanName = (pName || '').toLowerCase().trim();
+            const parts = cleanName.split(/\\s+/).filter(p => p.length > 2);
 
-            // Ищем совпадение по имени в alt или headshot в src
-            const matched = imgs.find(img => {
-                const src = img.src || '';
-                const alt = (img.alt || '').toLowerCase();
-                if (src.includes('logo') || src.includes('flag') || src.includes('icon')) return false;
-                if (parts.length > 0 && parts.some(p => alt.includes(p) || src.toLowerCase().includes(p))) return true;
-                if (src.includes('headshot') || src.includes('nhl.bamcontent.com') || src.includes('assets.nhle.com') || src.includes('/players/')) return true;
-                return false;
+            // А. Приоритет: фото с именем игрока в alt или title
+            if (parts.length > 0) {
+                const byAlt = imgs.find(img => {
+                    const alt = (img.alt || '').toLowerCase();
+                    const title = (img.title || '').toLowerCase();
+                    const src = (img.src || '').toLowerCase();
+                    if (src.includes('logo') || src.includes('flag') || src.includes('icon') || src.includes('.svg')) return false;
+                    return parts.every(part => alt.includes(part) || title.includes(part));
+                });
+                if (byAlt && byAlt.src) return byAlt.src;
+            }
+
+            // Б. Селекторы карточки профиля
+            const selectors = [
+                '.player-headshot img',
+                '.player-header img',
+                '.player-photo img',
+                '.player-image img',
+                '.bio-pic img',
+                '.headshot img'
+            ];
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el && el.src && !el.src.includes('logo') && !el.src.includes('default') && !el.src.includes('silhouette')) {
+                    return el.src;
+                }
+            }
+
+            // В. Картинки баз данных NHL
+            const nhlImg = imgs.find(img => {
+                const src = (img.src || '').toLowerCase();
+                return (src.includes('nhle.com') || src.includes('bamcontent.com') || src.includes('/headshot') || src.includes('/mugs/')) &&
+                       !src.includes('logo') && !src.includes('flag');
             });
-            if (matched && matched.src) return matched.src;
+            if (nhlImg && nhlImg.src) return nhlImg.src;
 
-            // Запасной селектор шапки профиля
-            const headerImg = document.querySelector('.player-headshot img, .player-header img, .player-info img, .bio img');
-            return headerImg ? headerImg.src : null;
+            // Г. Запасной вариант с /player
+            const generic = imgs.find(img => {
+                const src = (img.src || '').toLowerCase();
+                return src.includes('/player') && !src.includes('logo') && !src.includes('default');
+            });
+            return generic ? generic.src : null;
         }''', [player_name])
 
         if photo_url and photo_url.startswith("/"):
             photo_url = f"https://puckpedia.com{photo_url}"
 
-        return team_abbr, photo_url
+        res = (team_abbr, photo_url)
+        if cache_dict is not None:
+            cache_dict[player_url] = res
+        return res
     except Exception as e:
-        print(f"  Ошибка чтения профиля {player_url}: {e}")
+        print(f"  Ошибка чтения профиля {target_url}: {e}")
         return "UNK", None
 
 
@@ -651,14 +704,16 @@ async def main():
     raw_signings = []
     raw_trades = []
     raw_transactions = []
-    current_waivers = []
+    current_waivers_data = []
     current_injury_names_all = set()
     current_injury_urls = {}
     current_injuries_top = []
     injuries_loaded_ok = False
     prev_snapshot = {}
     prev_names = set()
-    recovered_lines = []
+
+    # Кэш внутри запуска, чтобы не делать лишних запросов страниц
+    runtime_profile_cache = {}
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -667,25 +722,25 @@ async def main():
         )
         page = await context.new_page()
 
-        # --- ПОДПИСАНИЯ ---
+        # --- 1. ПОДПИСАНИЯ ---
         print("Открываем страницу подписаний...")
         await page.goto("https://puckpedia.com/signings", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_signings = await fetch_api(page, SIGNINGS_API, "Подписания")
 
-        # --- ТРЕЙДЫ ---
+        # --- 2. ТРЕЙДЫ ---
         print("Открываем страницу трейдов...")
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
-        # --- ТРАНЗАКЦИИ ---
+        # --- 3. ТРАНЗАКЦИИ ---
         print("Открываем страницу транзакций...")
         await page.goto("https://puckpedia.com/transactions?transaction_type=roster", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_transactions = await fetch_api(page, TRANSACTIONS_API, "Транзакции")
 
-        # --- ТРАВМЫ ---
+        # --- 4. ТРАВМЫ ---
         print("Открываем страницу травм...")
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
@@ -725,44 +780,18 @@ async def main():
                 raw_injury_entries.append((name, reason, player_url))
 
             for name, reason, player_url in raw_injury_entries:
-                if player_url:
-                    team_abbr, photo_url = await get_player_profile_details(page, player_url, name)
-                else:
-                    team_abbr, photo_url = "UNK", None
+                team_abbr, photo_url = await get_player_profile_details(page, player_url, name, runtime_profile_cache)
                 current_injuries_top.append((name, team_abbr, reason, player_url, photo_url))
-                print(f"  Топ-3: {name} ({team_abbr}), {reason}, фото найдено: {bool(photo_url)}")
+                print(f"  Топ-3: {name} ({team_abbr}), {reason}, фото: {bool(photo_url)}")
 
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
-            recovered = prev_names - current_injury_names_all
-
-            if recovered and len(prev_names) > 0:
-                print(f"  Выздоровевших: {len(recovered)}")
-                for name in sorted(recovered):
-                    player_url = prev_snapshot[name].get("url", "")
-                    if player_url:
-                        team_abbr, _ = await get_player_profile_details(page, player_url, name)
-                        try:
-                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                        except Exception:
-                            rus_name = name
-                        line = (f"✅ {rus_name} ({team_abbr}) активирован из списка травмированных"
-                                if team_abbr and team_abbr != "UNK"
-                                else f"✅ {rus_name} активирован из списка травмированных")
-                    else:
-                        try:
-                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                        except Exception:
-                            rus_name = name
-                        line = f"✅ {rus_name} активирован из списка травмированных"
-                    recovered_lines.append(line)
-                    print(f"  Выздоровление: {line}")
         else:
             print(f"  ЗАЩИТА: список травм мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок пропускается.")
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
 
-        # --- УЭЙВЕР ---
+        # --- 5. УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
         await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
@@ -771,6 +800,8 @@ async def main():
         for row in rows:
             cells = await row.query_selector_all("td")
             if len(cells) >= 3:
+                name_link = await cells[0].query_selector("a[href*='/player/']")
+                player_url = await name_link.get_attribute("href") if name_link else ""
                 name = format_name((await cells[0].inner_text()).strip())
                 team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
                 team_abbr = get_team_abbr_by_slug(team_full)
@@ -778,231 +809,335 @@ async def main():
                 waiver_text = WAIVER_MAPPING.get(res, res)
                 emoji = "⬆️" if res == "claimed" else ("⬅️" if res == "cleared" else "➡️")
                 line = f"{emoji} {name} ({team_abbr}) {waiver_text}"
-                current_waivers.append(line)
-                print(f"  Уэйвер: {line}")
+
+                current_waivers_data.append({
+                    "line": line,
+                    "player_name": name,
+                    "player_url": player_url
+                })
                 count += 1
                 if count >= 3:
                     break
 
+        if not raw_signings:
+            print("Подписания не загрузились. Операция прервана.")
+            await browser.close()
+            return
+        if not raw_trades:
+            print("Трейды не загрузились. Операция прервана.")
+            await browser.close()
+            return
+
+        cache = load_cache()
+        all_posts_to_send = []
+
+        # =========================================================================
+        # 1. ОБРАБОТКА ПОДПИСАНИЙ
+        # =========================================================================
+        last_sign_date = cache["signings"].get("last_date", "")
+        last_sign_id = cache["signings"].get("last_id", "")
+        new_signings_raw = []
+        for item in raw_signings:
+            item_date = str(item.get("sign_date", "") or "")
+            item_id = str(item.get("cid", "") or item.get("id", "") or "")
+            if item_date > last_sign_date:
+                new_signings_raw.append(item)
+            elif item_date == last_sign_date and item_id and item_id != last_sign_id:
+                new_signings_raw.append(item)
+            else:
+                break
+
+        print(f"Новых подписаний: {len(new_signings_raw)}")
+        for item in new_signings_raw:
+            p_fn = str(item.get('p_fn', '')).strip()
+            p_ln = str(item.get('p_ln', '')).strip()
+            name = f"{p_fn} {p_ln}".strip()
+            if not name:
+                continue
+            lvl = str(item.get('lvl', '')).upper()
+            cap_hit = item.get('cap_hit', 0) or 0
+            try:
+                cap_val = float(str(cap_hit).replace(',', '')) / 10
+            except Exception:
+                cap_val = 0
+            years_raw = str(item.get('len', 1) or 1)
+            try:
+                years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
+            except Exception:
+                years = 1
+            sign_city = str(item.get('sign_city', '')).strip()
+            sign_team_name = str(item.get('sign_team_name', '')).strip()
+            team_name = f"{sign_city} {sign_team_name}".strip()
+            raw_type = str(item.get('type_name', '')).lower()
+            if "extension" in raw_type:
+                ctype = "продлил контракт"
+            else:
+                ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
+
+            try:
+                rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+            except Exception:
+                rus_name = name
+
+            caption = f"📝 {rus_name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
+
+            player_url = item.get('player_url') or item.get('url') or ""
+            if not player_url:
+                m = re.search(r'href=["\'](/player/[^"\']+)["\']', str(item))
+                if m:
+                    player_url = m.group(1)
+                else:
+                    slug = re.sub(r'[^a-z0-9\-]+', '', f"{p_fn}-{p_ln}".lower().replace(' ', '-'))
+                    player_url = f"/player/{slug}"
+
+            _, photo_url = await get_player_profile_details(page, player_url, name, runtime_profile_cache)
+            all_posts_to_send.append({"caption": caption, "photo": photo_url})
+
+        if raw_signings:
+            cache["signings"]["last_date"] = str(raw_signings[0].get("sign_date", "") or "")
+            cache["signings"]["last_id"] = str(raw_signings[0].get("cid", "") or raw_signings[0].get("id", "") or "")
+
+        # =========================================================================
+        # 2. ОБРАБОТКА ТРЕЙДОВ
+        # =========================================================================
+        last_trade_date = cache["trades"].get("last_date", "")
+        last_trade_id = cache["trades"].get("last_id", "")
+        new_trades_raw = []
+        for item in raw_trades:
+            item_date = str(item.get("trade_date", "") or "")
+            item_id = str(item.get("trade_id", "") or "")
+            if item_date > last_trade_date:
+                new_trades_raw.append(item)
+            elif item_date == last_trade_date and item_id and item_id != last_trade_id:
+                new_trades_raw.append(item)
+            else:
+                break
+
+        print(f"Новых трейдов: {len(new_trades_raw)}")
+        seen_trades = set()
+        for item in new_trades_raw:
+            text = str(item.get('details_nolinks', '') or item.get('details', '') or '').strip()
+            raw_html = str(item.get('details', '') or '')
+            if not text or len(text) < 20:
+                continue
+            translated = translate_trade(text)
+            if translated not in seen_trades and "The ID of this channel" not in translated:
+                seen_trades.add(translated)
+                caption = f"🔄 {translated}"
+
+                photo_url = None
+                m = re.search(r'href=["\'](/player/[^"\']+)["\']', raw_html)
+                if m:
+                    player_url = m.group(1)
+                    _, photo_url = await get_player_profile_details(page, player_url, "", runtime_profile_cache)
+
+                all_posts_to_send.append({"caption": caption, "photo": photo_url})
+
+        if raw_trades:
+            cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
+            cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
+
+        # =========================================================================
+        # 3. ОБРАБОТКА ТРАНЗАКЦИЙ
+        # =========================================================================
+        tx_cache = load_transactions_cache()
+        last_tx_date = tx_cache.get("last_date", "")
+        last_tx_id = tx_cache.get("last_id", "")
+
+        all_tx_lines_for_recent = []
+        for item in raw_transactions[:5]:
+            raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
+            if raw_text and len(raw_text) >= 10:
+                all_tx_lines_for_recent.append(translate_transaction(raw_text))
+        tx_cache["recent"] = all_tx_lines_for_recent
+
+        new_transactions_raw = []
+        for item in raw_transactions:
+            item_date = str(item.get("sort_date", "") or item.get("transaction_date", "") or "")
+            item_id = str(item.get("transaction_id", "") or item.get("id", "") or "")
+            if item_date > last_tx_date:
+                new_transactions_raw.append(item)
+            elif item_date == last_tx_date and item_id and item_id != last_tx_id:
+                new_transactions_raw.append(item)
+            else:
+                break
+
+        print(f"Новых транзакций: {len(new_transactions_raw)}")
+        seen_tx = set()
+        for item in new_transactions_raw:
+            raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
+            if not raw_text or len(raw_text) < 10:
+                continue
+            translated = translate_transaction(raw_text)
+            if translated not in seen_tx:
+                seen_tx.add(translated)
+                caption = f"🏒 {translated}"
+
+                photo_url = None
+                m = re.search(r'href=["\'](/player/[^"\']+)["\']', raw_text)
+                if m:
+                    player_url = m.group(1)
+                    _, photo_url = await get_player_profile_details(page, player_url, "", runtime_profile_cache)
+
+                all_posts_to_send.append({"caption": caption, "photo": photo_url})
+
+        if raw_transactions:
+            first = raw_transactions[0]
+            tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
+            tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
+
+        save_transactions_cache(tx_cache)
+        commit_file(TRANSACTIONS_CACHE_FILE, "Обновление кэша транзакций")
+
+        # =========================================================================
+        # 4. ОБРАБОТКА ТРАВМ И ВЫЗДОРОВЛЕНИЙ
+        # =========================================================================
+        if injuries_loaded_ok:
+            is_first_run = len(prev_snapshot) == 0
+            if is_first_run:
+                print("Первый запуск снапшота травм: публикаций нет, снапшот создаётся.")
+            else:
+                # Новые травмы
+                for name, team_abbr, reason, player_url, photo_url in current_injuries_top:
+                    if name not in prev_names:
+                        try:
+                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                        except Exception:
+                            rus_name = name
+                        caption = f"❌ {rus_name} ({team_abbr}), {reason}"
+                        print(f"  Новая травма: {name}")
+                        all_posts_to_send.append({"caption": caption, "photo": photo_url})
+
+                # Выздоровления
+                recovered = prev_names - current_injury_names_all
+                if recovered and len(prev_names) > 0:
+                    print(f"  Выздоровевших: {len(recovered)}")
+                    for name in sorted(recovered):
+                        player_url = prev_snapshot[name].get("url", "")
+                        team_abbr, rec_photo = await get_player_profile_details(page, player_url, name, runtime_profile_cache)
+                        try:
+                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                        except Exception:
+                            rus_name = name
+
+                        line = (f"✅ {rus_name} ({team_abbr}) активирован из списка травмированных"
+                                if team_abbr and team_abbr != "UNK"
+                                else f"✅ {rus_name} активирован из списка травмированных")
+
+                        all_posts_to_send.append({"caption": line, "photo": rec_photo})
+
+            new_snapshot = {}
+            top3_dict = {n: (t, r, u) for n, t, r, u, _ in current_injuries_top}
+            for name in current_injury_names_all:
+                if name in top3_dict:
+                    team, reason, url = top3_dict[name]
+                    new_snapshot[name] = {"team": team, "reason": reason, "url": url or ""}
+                elif name in prev_snapshot:
+                    new_snapshot[name] = prev_snapshot[name]
+                else:
+                    new_snapshot[name] = {"team": "UNK", "reason": "", "url": current_injury_urls.get(name, "")}
+
+            save_injuries_snapshot(new_snapshot)
+            commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
+            print(f"Снапшот травм обновлён: {len(new_snapshot)} игроков.")
+        else:
+            print("Снапшот травм не обновляется.")
+
+        # =========================================================================
+        # 5. ОБРАБОТКА УЭЙВЕРА (ДРАФТ ОТКАЗОВ)
+        # =========================================================================
+        seen_waiver_names = set(cache["waivers"].get("seen", []))
+        new_waiver_names = []
+
+        for w_item in current_waivers_data:
+            line = w_item["line"]
+            player_name = extract_player_name(line)
+            player_url = w_item["player_url"]
+
+            if player_name and player_name not in seen_waiver_names:
+                try:
+                    rus_name = GoogleTranslator(source='en', target='ru').translate(player_name)
+                    translated_line = line.replace(player_name, rus_name)
+                except Exception:
+                    translated_line = line
+
+                _, photo_url = await get_player_profile_details(page, player_url, player_name, runtime_profile_cache)
+                all_posts_to_send.append({"caption": translated_line, "photo": photo_url})
+                new_waiver_names.append(player_name)
+
+        print(f"Новых уэйверов: {len(new_waiver_names)}")
+        cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
+
+        # Сохраняем состояние кэша
+        save_cache(cache)
+        commit_cache()
+
+        # =========================================================================
+        # СИМУЛЯЦИЯ ДЛЯ ТЕСТА В ТЕРМИНАЛЕ
+        # =========================================================================
+        if DRY_RUN and not all_posts_to_send:
+            print("\nℹ️ [DRY RUN] Новых событий прямо сейчас нет. Демонстрируем по одному посту из каждой страницы:")
+
+            # 1. Пример подписания
+            if raw_signings:
+                s_item = raw_signings[0]
+                s_name = f"{s_item.get('p_fn', '')} {s_item.get('p_ln', '')}".strip()
+                s_url = s_item.get('player_url') or f"/player/{s_name.lower().replace(' ', '-')}"
+                _, s_photo = await get_player_profile_details(page, s_url, s_name, runtime_profile_cache)
+                try:
+                    s_rus = GoogleTranslator(source='en', target='ru').translate(s_name)
+                except Exception:
+                    s_rus = s_name
+                send_photo_to_telegram(s_photo, f"📝 [ТЕСТ: Подписание] {s_rus} подписал контракт")
+
+            # 2. Пример трейда
+            if raw_trades:
+                t_item = raw_trades[0]
+                t_raw = str(t_item.get('details', '') or '')
+                t_text = translate_trade(str(t_item.get('details_nolinks', '') or t_raw))
+                t_photo = None
+                tm = re.search(r'href=["\'](/player/[^"\']+)["\']', t_raw)
+                if tm:
+                    _, t_photo = await get_player_profile_details(page, tm.group(1), "", runtime_profile_cache)
+                send_photo_to_telegram(t_photo, f"🔄 [ТЕСТ: Трейд] {t_text}")
+
+            # 3. Пример транзакции
+            if raw_transactions:
+                tx_item = raw_transactions[0]
+                tx_raw = str(tx_item.get('details', '') or '')
+                tx_text = translate_transaction(tx_raw)
+                tx_photo = None
+                tx_m = re.search(r'href=["\'](/player/[^"\']+)["\']', tx_raw)
+                if tx_m:
+                    _, tx_photo = await get_player_profile_details(page, tx_m.group(1), "", runtime_profile_cache)
+                send_photo_to_telegram(tx_photo, f"🏒 [ТЕСТ: Транзакция] {tx_text}")
+
+            # 4. Пример травмы
+            if current_injuries_top:
+                i_name, i_team, i_reason, _, i_photo = current_injuries_top[0]
+                try:
+                    i_rus = GoogleTranslator(source='en', target='ru').translate(i_name)
+                except Exception:
+                    i_rus = i_name
+                send_photo_to_telegram(i_photo, f"❌ [ТЕСТ: Травма] {i_rus} ({i_team}), {i_reason}")
+
+            # 5. Пример драфта отказов
+            if current_waivers_data:
+                w_test = current_waivers_data[0]
+                _, w_photo = await get_player_profile_details(page, w_test['player_url'], w_test['player_name'], runtime_profile_cache)
+                send_photo_to_telegram(w_photo, f"⬆️ [ТЕСТ: Уэйвер] {w_test['line']}")
+
         await browser.close()
 
-    if not raw_signings:
-        print("Подписания не загрузились. Операция прервана.")
-        return
-    if not raw_trades:
-        print("Трейды не загрузились. Операция прервана.")
-        return
-
-    cache = load_cache()
-    all_new = []
-    injury_posts = []
-
-    # --- ПОДПИСАНИЯ ---
-    last_sign_date = cache["signings"].get("last_date", "")
-    last_sign_id = cache["signings"].get("last_id", "")
-    new_signings_raw = []
-    for item in raw_signings:
-        item_date = str(item.get("sign_date", "") or "")
-        item_id = str(item.get("cid", "") or item.get("id", "") or "")
-        if item_date > last_sign_date:
-            new_signings_raw.append(item)
-        elif item_date == last_sign_date and item_id and item_id != last_sign_id:
-            new_signings_raw.append(item)
-        else:
-            break
-
-    print(f"Новых подписаний: {len(new_signings_raw)}")
-    for item in new_signings_raw:
-        p_fn = str(item.get('p_fn', '')).strip()
-        p_ln = str(item.get('p_ln', '')).strip()
-        name = f"{p_fn} {p_ln}".strip()
-        if not name:
-            continue
-        lvl = str(item.get('lvl', '')).upper()
-        cap_hit = item.get('cap_hit', 0) or 0
-        try:
-            cap_val = float(str(cap_hit).replace(',', '')) / 10
-        except Exception:
-            cap_val = 0
-        years_raw = str(item.get('len', 1) or 1)
-        try:
-            years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
-        except Exception:
-            years = 1
-        sign_city = str(item.get('sign_city', '')).strip()
-        sign_team_name = str(item.get('sign_team_name', '')).strip()
-        team_name = f"{sign_city} {sign_team_name}".strip()
-        raw_type = str(item.get('type_name', '')).lower()
-        if "extension" in raw_type:
-            ctype = "продлил контракт"
-        else:
-            ctype = "подписал контракт новичка" if "ELC" in lvl else "подписал контракт"
-        
-        try:
-            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-        except Exception:
-            rus_name = name
-            
-        line = f"📝 {rus_name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
-        all_new.append(line)
-
-    if raw_signings:
-        cache["signings"]["last_date"] = str(raw_signings[0].get("sign_date", "") or "")
-        cache["signings"]["last_id"] = str(raw_signings[0].get("cid", "") or raw_signings[0].get("id", "") or "")
-
-    # --- ТРЕЙДЫ ---
-    last_trade_date = cache["trades"].get("last_date", "")
-    last_trade_id = cache["trades"].get("last_id", "")
-    new_trades_raw = []
-    for item in raw_trades:
-        item_date = str(item.get("trade_date", "") or "")
-        item_id = str(item.get("trade_id", "") or "")
-        if item_date > last_trade_date:
-            new_trades_raw.append(item)
-        elif item_date == last_trade_date and item_id and item_id != last_trade_id:
-            new_trades_raw.append(item)
-        else:
-            break
-
-    print(f"Новых трейдов: {len(new_trades_raw)}")
-    seen_trades = set()
-    for item in new_trades_raw:
-        text = str(item.get('details_nolinks', '') or item.get('details', '') or '').strip()
-        if not text or len(text) < 20:
-            continue
-        translated = translate_trade(text)
-        if translated not in seen_trades and "The ID of this channel" not in translated:
-            seen_trades.add(translated)
-            all_new.append(f"🔄 {translated}")
-
-    if raw_trades:
-        cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
-        cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
-
-    # --- ТРАНЗАКЦИИ ---
-    tx_cache = load_transactions_cache()
-    last_tx_date = tx_cache.get("last_date", "")
-    last_tx_id = tx_cache.get("last_id", "")
-
-    all_tx_lines_for_recent = []
-    for item in raw_transactions[:5]:
-        raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
-        if raw_text and len(raw_text) >= 10:
-            all_tx_lines_for_recent.append(translate_transaction(raw_text))
-    tx_cache["recent"] = all_tx_lines_for_recent
-    print(f"  recent обновлён: {all_tx_lines_for_recent}")
-
-    new_transactions_raw = []
-    for item in raw_transactions:
-        item_date = str(item.get("sort_date", "") or item.get("transaction_date", "") or "")
-        item_id = str(item.get("transaction_id", "") or item.get("id", "") or "")
-        if item_date > last_tx_date:
-            new_transactions_raw.append(item)
-        elif item_date == last_tx_date and item_id and item_id != last_tx_id:
-            new_transactions_raw.append(item)
-        else:
-            break
-
-    print(f"Новых транзакций: {len(new_transactions_raw)}")
-    seen_tx = set()
-    for item in new_transactions_raw:
-        raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
-        if not raw_text or len(raw_text) < 10:
-            continue
-        translated = translate_transaction(raw_text)
-        if translated not in seen_tx:
-            seen_tx.add(translated)
-            all_new.append(f"🏒 {translated}")
-
-    if raw_transactions:
-        first = raw_transactions[0]
-        tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
-        tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
-
-    save_transactions_cache(tx_cache)
-    commit_file(TRANSACTIONS_CACHE_FILE, "Обновление кэша транзакций")
-
-    # --- ТРАВМЫ ---
-    if injuries_loaded_ok:
-        is_first_run = len(prev_snapshot) == 0
-        if is_first_run:
-            print("Первый запуск снапшота травм: публикаций нет, снапшот создаётся.")
-        else:
-            for name, team_abbr, reason, _, photo_url in current_injuries_top:
-                if name not in prev_names:
-                    try:
-                        rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                    except Exception:
-                        rus_name = name
-                    caption = f"❌ {rus_name} ({team_abbr}), {reason}"
-                    print(f"  Новая травма: {name}")
-                    injury_posts.append((caption, photo_url))
-
-            all_new.extend(recovered_lines)
-
-        new_snapshot = {}
-        top3_dict = {n: (t, r, u) for n, t, r, u, _ in current_injuries_top}
-        for name in current_injury_names_all:
-            if name in top3_dict:
-                team, reason, url = top3_dict[name]
-                new_snapshot[name] = {"team": team, "reason": reason, "url": url or ""}
-            elif name in prev_snapshot:
-                new_snapshot[name] = prev_snapshot[name]
-            else:
-                new_snapshot[name] = {"team": "UNK", "reason": "", "url": current_injury_urls.get(name, "")}
-
-        save_injuries_snapshot(new_snapshot)
-        commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
-        print(f"Снапшот травм обновлён: {len(new_snapshot)} игроков.")
-    else:
-        print("Снапшот травм не обновляется.")
-
-    # --- УЭЙВЕР ---
-    seen_waiver_names = set(cache["waivers"].get("seen", []))
-    new_waivers = []
-    new_waiver_names = []
-    for line in current_waivers:
-        player_name = extract_player_name(line)
-        if player_name and player_name not in seen_waiver_names:
-            try:
-                rus_name = GoogleTranslator(source='en', target='ru').translate(player_name)
-                translated_line = line.replace(player_name, rus_name)
-            except Exception:
-                translated_line = line
-            new_waivers.append(translated_line)
-            new_waiver_names.append(player_name)
-
-    print(f"Новых уэйверов: {len(new_waivers)}")
-    all_new.extend(new_waivers)
-    cache["waivers"]["seen"] = list(seen_waiver_names) + new_waiver_names
-
-    # --- СОХРАНЯЕМ КЭШ ---
-    save_cache(cache)
-    commit_cache()
-
-    # --- СИМУЛЯЦИЯ ДЛЯ ТЕСТА (ЕСЛИ ТРАВМ НЕТ В ДАННЫЙ МОМЕНТ) ---
-    if DRY_RUN and not injury_posts and current_injuries_top:
-        print("\nℹ️ [DRY RUN] Новых травм в этот запуск не обнаружено. Демонстрируем пост для первой травмы из топа:")
-        demo_name, demo_team, demo_reason, _, demo_photo = current_injuries_top[0]
-        try:
-            demo_rus = GoogleTranslator(source='en', target='ru').translate(demo_name)
-        except Exception:
-            demo_rus = demo_name
-        demo_caption = f"❌ {demo_rus} ({demo_team}), {demo_reason}"
-        send_photo_to_telegram(demo_photo, demo_caption)
-
-    # --- ОТПРАВКА ТРАВМ (ОТДЕЛЬНЫЕ ПОСТЫ С ФОТО) ---
-    for caption, photo_url in injury_posts:
-        send_photo_to_telegram(photo_url, caption)
-        await asyncio.sleep(1)
-
-    # --- ОТПРАВКА ОСТАЛЬНЫХ СОБЫТИЙ (ОБЩИМ ТЕКСТОМ) ---
-    if all_new:
-        message = "\n\n".join(all_new)
-        send_to_telegram(message)
-        print(f"Отправлено {len(all_new)} текстовых записей.")
-
-    if not injury_posts and not all_new and not DRY_RUN:
+    # =========================================================================
+    # ПУБЛИКАЦИЯ В TELEGRAM
+    # =========================================================================
+    if all_posts_to_send:
+        print(f"Отправка {len(all_posts_to_send)} постов с фото в Telegram...")
+        for post in all_posts_to_send:
+            send_photo_to_telegram(post["photo"], post["caption"])
+            await asyncio.sleep(1.2)  # Пауза между сообщениями для избежания лимитов Telegram API
+    elif not DRY_RUN:
         print("Новых событий нет. Скрипт завершен без отправки.")
 
 
