@@ -289,6 +289,45 @@ def translate_transaction(raw_text):
         return text
 
 
+def load_cache():
+    default = {
+        "signings": {"last_date": "", "last_id": ""},
+        "trades": {"last_date": "", "last_id": ""},
+        "waivers": {"seen": []}
+    }
+    if not os.path.exists(CACHE_FILE):
+        return default
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return default
+    if not isinstance(data, dict):
+        return default
+    for key in ("signings", "trades"):
+        if not isinstance(data.get(key), dict):
+            data[key] = {"last_date": "", "last_id": ""}
+        else:
+            data[key].setdefault("last_date", "")
+            data[key].setdefault("last_id", "")
+    data.pop("injuries", None)
+    data.pop("transactions", None)
+    if not isinstance(data.get("waivers"), dict):
+        data["waivers"] = {"seen": []}
+    if not isinstance(data["waivers"].get("seen"), list):
+        data["waivers"]["seen"] = []
+    return data
+
+
+def save_cache(cache):
+    if DRY_RUN:
+        return
+    tmp = CACHE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, CACHE_FILE)
+
+
 def load_transactions_cache():
     default = {"last_date": "", "last_id": "", "recent": []}
     if not os.path.exists(TRANSACTIONS_CACHE_FILE):
