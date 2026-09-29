@@ -748,7 +748,20 @@ async def resolve_profiles(context, jobs, profile_cache):
     '''Параллельно получает только отсутствующие в постоянном кэше профили.'''
     unique = {}
     for player_url, player_name in jobs:
-        if player_url and player_url not in profile_cache:
+        if not player_url:
+            continue
+
+        cached = profile_cache.get(player_url)
+        cached_photo = None
+        if isinstance(cached, dict):
+            cached_photo = cached.get("photo")
+        elif isinstance(cached, (list, tuple)) and len(cached) >= 2:
+            cached_photo = cached[1]
+
+        # Если URL уже есть в кэше, но фото отсутствует, профиль ОБЯЗАТЕЛЬНО
+        # запрашиваем заново. Иначе одна неудачная попытка навсегда оставляет
+        # игрока без фотографии.
+        if not cached_photo:
             unique[player_url] = player_name or player_name_from_url(player_url)
 
     if not unique:
