@@ -23,6 +23,11 @@ DRY_RUN = (
     or os.environ.get("DRY_RUN", "").lower() in ("true", "1")
 )
 
+# Одноразовый реальный тест: отправляет ровно один пост в Telegram
+# из актуальных данных PuckPedia и сразу завершает работу.
+# Кэши и Git при этом не изменяются.
+TEST_ONE = "--test-one" in sys.argv
+
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
     'predators': 'NAS', 'ducks': 'ANA', 'jets': 'WPG', 'wild': 'MIN', 'islanders': 'NYI',
@@ -841,6 +846,118 @@ async def main():
             fetch_page_data(context, "https://puckpedia.com/transactions?transaction_type=roster", TRANSACTIONS_API, "Транзакции"),
         )
         print(f"⏱ API-блок: {asyncio.get_running_loop().time() - api_start:.2f} сек.")
+
+        # ================================================================
+        # ОДИН РЕАЛЬНЫЙ ТЕСТОВЫЙ ПОСТ
+        # ================================================================
+        # Берём существующую свежую запись прямо из ответа PuckPedia,
+        # независимо от содержимого кэша. Это позволяет протестировать
+        # полный путь: PuckPedia -> текст -> профиль -> фото -> Telegram,
+        # даже если на сайте с прошлого запуска ничего не изменилось.
+        # Никакие кэши/снапшоты/Git в этом режиме не сохраняются.
+        if TEST_ONE:
+            print("\n🧪 TEST-ONE: ищем одну реальную запись для отправки...")
+
+            test_caption = None
+            test_player_url = ""
+            test_player_name = ""
+            test_source = ""
+
+            # 1. Сначала пробуем самое простое и стабильное — последнее подписание.
+            if raw_signings:
+                item = raw_signings[0]
+                p_fn = str(item.get('p_fn', '')).strip()
+                p_ln = str(item.get('p_ln', '')).strip()
+                test_player_name = f"{p_fn} {p_ln}".strip()
+                if test_player_name:
+                    lvl = str(item.get('lvl', '')).upper()
+                    cap_hit = item.get('cap_hit', 0) or 0
+                    try:
+                        cap_val = float(str(cap_hit).replace(',', '')) / 10
+                    except Exception:
+                        cap_val = 0
+                    years_raw = str(item.get('len', 1) or 1)
+                    try:
+                        years = int(re.sub(r'[^0-9]', '', years_raw) or 1)
+                    except Exception:
+                        years = 1
+                    team_name = f"{str(item.get('sign_city', '')).strip()} {str(item.get('sign_team_name', '')).strip()}".strip()
+                    raw_type = str(item.get('type_name', '')).lower()
+                    ctype = (
+                        "продлил контракт" if "extension" in raw_type
+                        else ("подписал контракт новичка" if "ELC" in lvl else "подписал контракт")
+                    )
+                    rus_name = translate_cached(test_player_name, "name")
+                    test_caption = (
+                        f"📝 {rus_name} {ctype} {format_years(years)} "
+                        f"с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
+                    )
+                    test_player_url = item.get('player_url') or item.get('url') or ""
+                    if not test_player_url:
+                        slug = re.sub(
+                            r'[^a-z0-9\-]+', '',
+                            f"{p_fn}-{p_ln}".lower().replace(' ', '-')
+                        )
+                        test_player_url = f"/player/{slug}"
+                    test_source = "подписание"
+
+            # Если подписания по какой-то причине не пришли, пробуем трейд.
+            if not test_caption and raw_trades:
+                item = raw_trades[0]
+                text = str(item.get('details_nolinks', '') or item.get('details', '') or '').strip()
+                raw_html = str(item.get('details', '') or '')
+                if text:
+                    translated = translate_trade(text)
+                    test_caption = f"🔄 {translated}"
+                    player_urls = re.findall(r'href=["\'](/player/[^"\']+)["\']', raw_html)
+                    test_player_url = player_urls[0] if player_urls else ""
+                    test_player_name = player_name_from_url(test_player_url)
+                    test_source = "трейд"
+
+            # Последний резерв — транзакция.
+            if not test_caption and raw_transactions:
+                item = raw_transactions[0]
+                raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
+                if raw_text:
+                    translated = translate_transaction(raw_text)
+                    test_caption = f"🏒 {translated}"
+                    player_urls = re.findall(r'href=["\'](/player/[^"\']+)["\']', raw_text)
+                    test_player_url = player_urls[0] if player_urls else ""
+                    test_player_name = player_name_from_url(test_player_url)
+                    test_source = "транзакция"
+
+            if not test_caption:
+                print("❌ TEST-ONE: PuckPedia не вернул ни одной подходящей записи.")
+                await browser.close()
+                return
+
+            test_profile_cache = load_player_profile_cache()
+            if test_player_url:
+                profile_start = asyncio.get_running_loop().time()
+                await resolve_profiles(
+                    context,
+                    [(test_player_url, test_player_name or player_name_from_url(test_player_url))],
+                    test_profile_cache
+                )
+                print(f"⏱ TEST-ONE профиль/фото: {asyncio.get_running_loop().time() - profile_start:.2f} сек.")
+
+            _, test_photo = profile_result(test_profile_cache, test_player_url)
+
+            print("\n" + "=" * 70)
+            print("🧪 TEST-ONE: ОТПРАВЛЯЕМ РОВНО ОДИН РЕАЛЬНЫЙ ПОСТ")
+            print(f"Источник: {test_source}")
+            print(f"Игрок: {test_player_name or 'не определён'}")
+            print(f"Фото: {test_photo or 'НЕ НАЙДЕНО'}")
+            print(f"Текст: {test_caption}")
+            print("=" * 70)
+
+            send_photo_to_telegram(test_photo, test_caption)
+            print("✅ TEST-ONE: отправка завершена.")
+            print("ℹ️ Кэши, снапшоты и Git в этом режиме НЕ изменялись.")
+
+            await browser.close()
+            print(f"🏁 TEST-ONE завершён за {asyncio.get_running_loop().time() - t0:.2f} сек.")
+            return
 
         injury_page, waiver_page = await asyncio.gather(
             load_table_page(context, "https://puckpedia.com/injuries", "tr:has(a.pp_link[href*='/player/'])", "травм"),
