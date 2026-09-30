@@ -1,7 +1,7 @@
 {
   "signings": {
     "last_date": "2026-09-30",
-    "last_id": "10833"
+    "last_id": "10834"
   },
   "trades": {
     "last_date": "2026-09-28",
@@ -14,37 +14,37 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Travis Mitchell",
-      "Jack Ahcan",
-      "Ronan Seeley",
+      "Cameron Butler",
+      "Cayden Primeau",
       "Jacob Bryson",
-      "Navrin Mutter",
-      "Nathan Gaucher",
-      "Michael Pezzetta",
-      "James Hamblin",
-      "Alex Steeves",
-      "John Hayden",
+      "Ronan Seeley",
       "Lukas Reichel",
-      "Pheonix Copley",
-      "Miles Wood",
-      "Henri Jokiharju",
-      "Viktor Neuchev",
-      "Brandon Halverson",
-      "Clay Stevenson",
-      "Chris Kreider",
-      "Zachary Sawchenko",
+      "Michael Pezzetta",
+      "Jack Ahcan",
+      "James Hamblin",
+      "Conor Sheary",
+      "Travis Mitchell",
+      "Sean Farrell",
+      "Tyson Jost",
+      "Jon-Randall Avon",
       "Vincent Iorio",
       "Maxence Guenette",
-      "Cameron Butler",
-      "Laurent Brossoit",
-      "Derrick Pouliot",
-      "Sean Farrell",
-      "Conor Sheary",
+      "Viktor Neuchev",
+      "Chris Kreider",
+      "Miles Wood",
+      "Alex Steeves",
+      "Clay Stevenson",
+      "Zachary Sawchenko",
       "Marc-Andre Gaudet",
-      "Jon-Randall Avon",
-      "Tyson Jost",
+      "Laurent Brossoit",
+      "John Hayden",
+      "Nathan Gaucher",
+      "Brandon Halverson",
+      "Navrin Mutter",
       "James Malatesta",
-      "Cayden Primeau"
+      "Henri Jokiharju",
+      "Derrick Pouliot",
+      "Pheonix Copley"
     ]
   }
 }
