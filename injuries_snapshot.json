@@ -1,178 +1,333 @@
 {
-  "Lukas Cormier": {
-    "team": "VGK",
+  "Charlie McAvoy": {
+    "team": "BOS",
+    "reason": "Suspension",
+    "url": "/player/charlie-mcavoy"
+  },
+  "Gabriel D'Aigle": {
+    "team": "PIT",
     "reason": "характер травмы не разглашается",
-    "url": "/player/lukas-cormier"
+    "url": "/player/gabriel-daigle"
   },
-  "Logan O'Connor": {
-    "team": "COL",
-    "reason": "травма нижней части тела",
-    "url": "/player/logan-oconnor"
+  "Johnathan Kovacevic": {
+    "team": "NJD",
+    "reason": "травма колена",
+    "url": "/player/johnathan-kovacevic"
   },
-  "William Villeneuve": {
+  "James Stefan": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/william-villeneuve"
+    "url": "/player/james-stefan"
+  },
+  "Nikita Grebenkin": {
+    "team": "PHI",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/nikita-grebyonkin"
   },
   "Jorian Donovan": {
     "team": "UNK",
     "reason": "",
     "url": "/player/jorian-donovan"
   },
-  "Aidan Thompson": {
-    "team": "NYR",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/aidan-thompson"
-  },
-  "Simon Edvinsson": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/simon-edvinsson"
-  },
-  "Otto Salin": {
-    "team": "LAK",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/otto-salin"
-  },
-  "Cade Webber": {
+  "Dakota Joshua": {
     "team": "TOR",
-    "reason": "травма локтя",
-    "url": "/player/cade-webber"
+    "reason": "характер травмы не разглашается",
+    "url": "/player/dakota-joshua"
   },
-  "Ben Hemmerling": {
+  "Alexander Nikishin": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/ben-hemmerling"
+    "url": "/player/alexander-nikishin"
   },
-  "Patrick Thomas": {
-    "team": "WSH",
+  "Ridly Greig": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ridly-greig"
+  },
+  "Warren Foegele": {
+    "team": "OTT",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/warren-foegele"
+  },
+  "Luke Krys": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/luke-krys"
+  },
+  "Mackie Samoskevich": {
+    "team": "SEA",
     "reason": "травма верхней части тела",
-    "url": "/player/patrick-thomas"
+    "url": "/player/matthew-samoskevich"
   },
-  "Helge Grans": {
+  "Jonah Gadjovich": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/helge-grans"
+    "url": "/player/jonah-gadjovich"
   },
-  "Lucas Condotta": {
+  "Mattias Janmark": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/lucas-condotta"
+    "url": "/player/mattias-janmark"
   },
-  "Kai Uchacz": {
-    "team": "VGK",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/kai-uchacz"
-  },
-  "Max Domi": {
-    "team": "TOR",
-    "reason": "травма спины",
-    "url": "/player/max-domi"
-  },
-  "Seamus Casey": {
-    "team": "NJD",
-    "reason": "травма колена",
-    "url": "/player/seamus-casey"
-  },
-  "Troy Terry": {
-    "team": "ANA",
-    "reason": "травма бедра",
-    "url": "/player/troy-terry"
+  "Conor Timmins": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/conor-timmins"
   },
   "Harrison Scott": {
     "team": "UNK",
     "reason": "",
     "url": "/player/harrison-scott"
   },
-  "Walker Duehr": {
+  "Raphael Lavoie": {
+    "team": "VGK",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/raphael-lavoie"
+  },
+  "Ben Hemmerling": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/walker-duehr"
+    "url": "/player/ben-hemmerling"
   },
-  "Connor Hellebuyck": {
-    "team": "WPG",
-    "reason": "Suspension",
-    "url": "/player/connor-hellebuyck"
+  "Patrick Giles": {
+    "team": "SJS",
+    "reason": "травма верхней части тела",
+    "url": "/player/patrick-giles"
   },
-  "Matthew Poitras": {
+  "Elvis Merzlikins": {
+    "team": "CBJ",
+    "reason": "травма плеча",
+    "url": "/player/elvis-merzlikins"
+  },
+  "Félix Trudeau": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/matthew-poitras"
+    "url": "/player/felix-trudeau"
   },
-  "Andre Burakovsky": {
+  "Otto Salin": {
+    "team": "LAK",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/otto-salin"
+  },
+  "Denver Barkey": {
+    "team": "PHI",
+    "reason": "травма нижней части тела",
+    "url": "/player/denver-barkey"
+  },
+  "Jason Zucker": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jason-zucker"
+  },
+  "Dante Fabbro": {
+    "team": "CBJ",
+    "reason": "травма верхней части тела",
+    "url": "/player/dante-fabbro"
+  },
+  "Frederik Andersen": {
+    "team": "EDM",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/frederik-andersen"
+  },
+  "Patrick Thomas": {
+    "team": "WSH",
+    "reason": "травма верхней части тела",
+    "url": "/player/patrick-thomas"
+  },
+  "Ryan Ellis": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/ryan-ellis"
+  },
+  "Jake Sanderson": {
     "team": "OTT",
     "reason": "характер травмы не разглашается",
-    "url": "/player/andre-burakovsky"
+    "url": "/player/jake-sanderson"
+  },
+  "Cade Webber": {
+    "team": "TOR",
+    "reason": "травма локтя",
+    "url": "/player/cade-webber"
+  },
+  "Georgii Merkulov": {
+    "team": "COL",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/georgi-merkulov"
+  },
+  "Jacob Bernard-Docker": {
+    "team": "DET",
+    "reason": "травма верхней части тела",
+    "url": "/player/jacob-bernard-docker"
+  },
+  "Logan Mailloux": {
+    "team": "STL",
+    "reason": "травма верхней части тела",
+    "url": "/player/logan-mailloux"
+  },
+  "Henry Mews": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/henry-mews"
   },
   "Garrett Brown": {
     "team": "WPG",
     "reason": "травма нижней части тела",
     "url": "/player/garrett-brown"
   },
-  "Olen Zellweger": {
-    "team": "BUF",
-    "reason": "сотрясение мозга",
-    "url": "/player/olen-zellweger"
+  "Ryan Nugent-Hopkins": {
+    "team": "EDM",
+    "reason": "травма нижней части тела",
+    "url": "/player/ryan-nugent-hopkins"
+  },
+  "Filip Chytil": {
+    "team": "VAN",
+    "reason": "травма плеча",
+    "url": "/player/filip-chytil"
+  },
+  "Connor Brown": {
+    "team": "NJD",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/connor-brown"
+  },
+  "Matthew Savoie": {
+    "team": "EDM",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/matthew-savoie"
+  },
+  "Jaxon Fuder": {
+    "team": "DAL",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/jaxon-fuder"
+  },
+  "Benjamin Kindel": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/benjamin-kindel"
+  },
+  "Matt Duchene": {
+    "team": "DAL",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/matt-duchene"
+  },
+  "Blake Montgomery": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/blake-montgomery"
   },
   "Riley Bezeau": {
     "team": "CBJ",
     "reason": "характер травмы не разглашается",
     "url": "/player/riley-bezeau"
   },
-  "Cameron Hughes": {
-    "team": "DAL",
-    "reason": "травма верхней части тела",
-    "url": "/player/cameron-hughes"
-  },
-  "Mathew Barzal": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/mathew-barzal"
-  },
-  "Chase Stillman": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/chase-stillman"
-  },
-  "Jakub Dvorak": {
-    "team": "LAK",
-    "reason": "травма верхней части тела",
-    "url": "/player/jakub-dvorak"
+  "Seth Jarvis": {
+    "team": "CAR",
+    "reason": "травма плеча",
+    "url": "/player/seth-jarvis"
   },
   "Torey Krug": {
     "team": "UNK",
     "reason": "",
     "url": "/player/torey-krug"
   },
-  "Cameron Lund": {
-    "team": "SJS",
+  "Olen Zellweger": {
+    "team": "BUF",
+    "reason": "сотрясение мозга",
+    "url": "/player/olen-zellweger"
+  },
+  "Jakub Dvorak": {
+    "team": "LAK",
     "reason": "травма верхней части тела",
-    "url": "/player/cameron-lund"
+    "url": "/player/jakub-dvorak"
   },
-  "Caleb MacDonald": {
-    "team": "CBJ",
-    "reason": "травма нижней части тела",
-    "url": "/player/caleb-macdonald"
+  "Brock Faber": {
+    "team": "MIN",
+    "reason": "травма верхней части тела",
+    "url": "/player/brock-faber"
   },
-  "Nick Bjugstad": {
-    "team": "NJD",
-    "reason": "Pectoral",
-    "url": "/player/nick-bjugstad"
-  },
-  "Bryce Pickford": {
+  "Logan Couture": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/bryce-pickford"
+    "url": "/player/logan-couture"
+  },
+  "Lukas Cormier": {
+    "team": "VGK",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/lukas-cormier"
+  },
+  "Seamus Casey": {
+    "team": "NJD",
+    "reason": "травма колена",
+    "url": "/player/seamus-casey"
+  },
+  "Topias Leinonen": {
+    "team": "BUF",
+    "reason": "травма нижней части тела",
+    "url": "/player/topias-leinonen"
+  },
+  "Kevin Fiala": {
+    "team": "LAK",
+    "reason": "травма голени",
+    "url": "/player/kevin-fiala"
+  },
+  "Andrew Mangiapane": {
+    "team": "CHI",
+    "reason": "травма нижней части тела",
+    "url": "/player/andrew-mangiapane"
+  },
+  "Oliver Okuliar": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/oliver-okuliar"
+  },
+  "Dominic James": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/dominic-james"
+  },
+  "Bryan Rust": {
+    "team": "PIT",
+    "reason": "травма верхней части тела",
+    "url": "/player/bryan-rust"
+  },
+  "Troy Terry": {
+    "team": "ANA",
+    "reason": "травма бедра",
+    "url": "/player/troy-terry"
+  },
+  "Mackenzie Entwistle": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/mackenzie-entwistle"
+  },
+  "Ivan Provorov": {
+    "team": "CBJ",
+    "reason": "травма нижней части тела",
+    "url": "/player/ivan-provorov"
   },
   "Filip Gustavsson": {
     "team": "MIN",
     "reason": "травма бедра",
     "url": "/player/filip-gustavsson"
   },
-  "Georgii Merkulov": {
-    "team": "COL",
+  "Tyler Tucker": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/tyler-tucker"
+  },
+  "Jan Jenik": {
+    "team": "LAK",
     "reason": "характер травмы не разглашается",
-    "url": "/player/georgi-merkulov"
+    "url": "/player/jan-jenik"
+  },
+  "Helge Grans": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/helge-grans"
+  },
+  "Alex Pietrangelo": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/alex-pietrangelo"
   },
   "Taylor Makar": {
     "team": "COL",
@@ -194,464 +349,304 @@
     "reason": "характер травмы не разглашается",
     "url": "/player/kaiden-guhle"
   },
-  "Mackenzie Entwistle": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/mackenzie-entwistle"
-  },
-  "Adam Jecho": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/adam-jecho"
-  },
   "Maveric Lamoureux": {
     "team": "UTAH",
     "reason": "травма верхней части тела",
     "url": "/player/maveric-lamoureux"
-  },
-  "Luke Krys": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/luke-krys"
-  },
-  "Frederik Andersen": {
-    "team": "EDM",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/frederik-andersen"
-  },
-  "Ryan Nugent-Hopkins": {
-    "team": "EDM",
-    "reason": "травма нижней части тела",
-    "url": "/player/ryan-nugent-hopkins"
-  },
-  "Elvis Merzlikins": {
-    "team": "CBJ",
-    "reason": "травма плеча",
-    "url": "/player/elvis-merzlikins"
-  },
-  "A.J. Greer": {
-    "team": "ANA",
-    "reason": "травма верхней части тела",
-    "url": "/player/aj-greer"
-  },
-  "Bryan Rust": {
-    "team": "PIT",
-    "reason": "травма верхней части тела",
-    "url": "/player/bryan-rust"
-  },
-  "Logan Couture": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/logan-couture"
-  },
-  "Isac Lundestrom": {
-    "team": "CBJ",
-    "reason": "травма ахилла",
-    "url": "/player/isac-lundestrom"
-  },
-  "Alex Lyon": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/alex-lyon"
-  },
-  "Dylan Larkin": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/dylan-larkin"
-  },
-  "Logan Mailloux": {
-    "team": "STL",
-    "reason": "травма верхней части тела",
-    "url": "/player/logan-mailloux"
-  },
-  "Adam Gaudette": {
-    "team": "SJS",
-    "reason": "травма верхней части тела",
-    "url": "/player/adam-gaudette"
-  },
-  "James Stefan": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/james-stefan"
-  },
-  "Jan Jenik": {
-    "team": "LAK",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/jan-jenik"
-  },
-  "Zachary L'Heureux": {
-    "team": "COL",
-    "reason": "травма нижней части тела",
-    "url": "/player/zachary-lheureux"
-  },
-  "Denver Barkey": {
-    "team": "PHI",
-    "reason": "травма нижней части тела",
-    "url": "/player/denver-barkey"
-  },
-  "Jack Rathbone": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jack-rathbone"
-  },
-  "Justin Brazeau": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/justin-brazeau"
-  },
-  "Henry Mews": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/henry-mews"
-  },
-  "Yanni Gourde": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/yanni-gourde"
-  },
-  "Jake O'Brien": {
-    "team": "SEA",
-    "reason": "травма нижней части тела",
-    "url": "/player/jake-obrien"
-  },
-  "Ian Moore": {
-    "team": "ANA",
-    "reason": "травма нижней части тела",
-    "url": "/player/ian-moore"
-  },
-  "Jason Zucker": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jason-zucker"
-  },
-  "Benjamin Kindel": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/benjamin-kindel"
-  },
-  "Conor Timmins": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/conor-timmins"
-  },
-  "Melvin Fernström": {
-    "team": "PIT",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/melvin-fernstrom"
-  },
-  "Matthew Savoie": {
-    "team": "EDM",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/matthew-savoie"
-  },
-  "Kurtis MacDermid": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/kurtis-macdermid"
-  },
-  "Quentin Musty": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/quentin-musty"
-  },
-  "Dante Fabbro": {
-    "team": "CBJ",
-    "reason": "травма верхней части тела",
-    "url": "/player/dante-fabbro"
-  },
-  "Nikita Grebenkin": {
-    "team": "PHI",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/nikita-grebyonkin"
-  },
-  "Félix Trudeau": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/felix-trudeau"
-  },
-  "Mackie Samoskevich": {
-    "team": "SEA",
-    "reason": "травма верхней части тела",
-    "url": "/player/matthew-samoskevich"
   },
   "Ryan Graves": {
     "team": "PIT",
     "reason": "травма колена",
     "url": "/player/ryan-graves"
   },
-  "Dakota Joshua": {
-    "team": "TOR",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/dakota-joshua"
-  },
-  "Warren Foegele": {
-    "team": "OTT",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/warren-foegele"
-  },
-  "Elias Salomonsson": {
-    "team": "WPG",
-    "reason": "травма плеча",
-    "url": "/player/elias-salomonsson"
-  },
-  "Alex Pietrangelo": {
+  "Akil Thomas": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/alex-pietrangelo"
+    "url": "/player/akil-thomas"
   },
-  "Johnathan Kovacevic": {
-    "team": "NJD",
-    "reason": "травма колена",
-    "url": "/player/johnathan-kovacevic"
-  },
-  "Damon Severson": {
-    "team": "CBJ",
-    "reason": "травма плеча",
-    "url": "/player/damon-severson"
-  },
-  "Mattias Samuelsson": {
-    "team": "BUF",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/mattias-samuelsson"
-  },
-  "Tyler Tucker": {
+  "Quentin Musty": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/tyler-tucker"
+    "url": "/player/quentin-musty"
   },
-  "Andrei Kuzmenko": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/andrei-kuzmenko"
-  },
-  "Atro Leppänen": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/atro-leppanen"
-  },
-  "Andreas Englund": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/andreas-englund"
-  },
-  "Seth Jarvis": {
-    "team": "CAR",
-    "reason": "травма плеча",
-    "url": "/player/seth-jarvis"
-  },
-  "Jack Thompson": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jack-thompson"
-  },
-  "Alec Regula": {
-    "team": "EDM",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/alec-regula"
-  },
-  "Ivan Provorov": {
-    "team": "CBJ",
-    "reason": "травма нижней части тела",
-    "url": "/player/ivan-provorov"
-  },
-  "Drew Helleson": {
+  "A.J. Greer": {
     "team": "ANA",
-    "reason": "травма нижней части тела",
-    "url": "/player/drew-helleson"
-  },
-  "Kevin Fiala": {
-    "team": "LAK",
-    "reason": "травма голени",
-    "url": "/player/kevin-fiala"
-  },
-  "Jonah Gadjovich": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/jonah-gadjovich"
-  },
-  "Alexander Nikishin": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/alexander-nikishin"
-  },
-  "Tristan Broz": {
-    "team": "PIT",
-    "reason": "травма нижней части тела",
-    "url": "/player/tristan-broz"
-  },
-  "Thatcher Demko": {
-    "team": "VAN",
-    "reason": "травма бедра",
-    "url": "/player/thatcher-demko"
-  },
-  "Carter Bear": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/carter-bear"
-  },
-  "Jonathan Huberdeau": {
-    "team": "CGY",
-    "reason": "травма бедра",
-    "url": "/player/jonathan-huberdeau"
-  },
-  "Ridly Greig": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/ridly-greig"
-  },
-  "Dominic James": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/dominic-james"
-  },
-  "Ryan Ellis": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/ryan-ellis"
-  },
-  "Adam Sýkora": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/adam-sykora"
-  },
-  "Topias Leinonen": {
-    "team": "BUF",
-    "reason": "травма нижней части тела",
-    "url": "/player/topias-leinonen"
-  },
-  "Jaxon Fuder": {
-    "team": "DAL",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/jaxon-fuder"
-  },
-  "Charlie McAvoy": {
-    "team": "BOS",
-    "reason": "Suspension",
-    "url": "/player/charlie-mcavoy"
-  },
-  "Andrew Mangiapane": {
-    "team": "CHI",
-    "reason": "травма нижней части тела",
-    "url": "/player/andrew-mangiapane"
+    "reason": "травма верхней части тела",
+    "url": "/player/aj-greer"
   },
   "Rasmus Sandin": {
     "team": "UNK",
     "reason": "",
     "url": "/player/rasmus-sandin"
   },
-  "Oliver Okuliar": {
+  "Adam Jecho": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/oliver-okuliar"
-  },
-  "Filip Chytil": {
-    "team": "VAN",
-    "reason": "травма плеча",
-    "url": "/player/filip-chytil"
-  },
-  "Blake Montgomery": {
-    "team": "UNK",
-    "reason": "",
-    "url": "/player/blake-montgomery"
-  },
-  "Brock Faber": {
-    "team": "MIN",
-    "reason": "травма верхней части тела",
-    "url": "/player/brock-faber"
+    "url": "/player/adam-jecho"
   },
   "Kyle Keyser": {
     "team": "UNK",
     "reason": "",
     "url": "/player/kyle-keyser"
   },
-  "Jacob Bernard-Docker": {
-    "team": "DET",
+  "Kai Uchacz": {
+    "team": "VGK",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/kai-uchacz"
+  },
+  "Justin Brazeau": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/justin-brazeau"
+  },
+  "Adam Gaudette": {
+    "team": "SJS",
     "reason": "травма верхней части тела",
-    "url": "/player/jacob-bernard-docker"
+    "url": "/player/adam-gaudette"
+  },
+  "Jack Rathbone": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/jack-rathbone"
+  },
+  "Elias Salomonsson": {
+    "team": "WPG",
+    "reason": "травма плеча",
+    "url": "/player/elias-salomonsson"
+  },
+  "Damon Severson": {
+    "team": "CBJ",
+    "reason": "травма плеча",
+    "url": "/player/damon-severson"
+  },
+  "Zachary L'Heureux": {
+    "team": "COL",
+    "reason": "травма нижней части тела",
+    "url": "/player/zachary-lheureux"
+  },
+  "Logan O'Connor": {
+    "team": "COL",
+    "reason": "травма нижней части тела",
+    "url": "/player/logan-oconnor"
+  },
+  "Alec Regula": {
+    "team": "EDM",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/alec-regula"
+  },
+  "Bryce Pickford": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/bryce-pickford"
+  },
+  "Jonathan Huberdeau": {
+    "team": "CGY",
+    "reason": "травма бедра",
+    "url": "/player/jonathan-huberdeau"
+  },
+  "Isac Lundestrom": {
+    "team": "CBJ",
+    "reason": "травма ахилла",
+    "url": "/player/isac-lundestrom"
+  },
+  "Jake O'Brien": {
+    "team": "SEA",
+    "reason": "травма нижней части тела",
+    "url": "/player/jake-obrien"
+  },
+  "Tristan Broz": {
+    "team": "PIT",
+    "reason": "травма нижней части тела",
+    "url": "/player/tristan-broz"
+  },
+  "Cameron Hughes": {
+    "team": "DAL",
+    "reason": "травма верхней части тела",
+    "url": "/player/cameron-hughes"
+  },
+  "Mattias Samuelsson": {
+    "team": "BUF",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/mattias-samuelsson"
   },
   "Tristan Bertucci": {
     "team": "DAL",
     "reason": "характер травмы не разглашается",
     "url": "/player/tristan-bertucci"
   },
-  "Alex Barre-Boulet": {
-    "team": "SJS",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/alex-barre-boulet"
-  },
-  "Mattias Janmark": {
+  "Mikael Pyyhtia": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/mattias-janmark"
+    "url": "/player/mikael-pyyhtia"
   },
-  "Oliver Kapanen": {
-    "team": "MTL",
-    "reason": "травма нижней части тела",
-    "url": "/player/oliver-kapanen"
+  "Atro Leppänen": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/atro-leppanen"
+  },
+  "Lucas Condotta": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/lucas-condotta"
   },
   "Trent Miner": {
     "team": "UNK",
     "reason": "",
     "url": "/player/trent-miner"
   },
-  "Raphael Lavoie": {
-    "team": "VGK",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/raphael-lavoie"
+  "Oliver Kapanen": {
+    "team": "MTL",
+    "reason": "травма нижней части тела",
+    "url": "/player/oliver-kapanen"
   },
-  "Gabriel D'Aigle": {
-    "team": "PIT",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/gabriel-daigle"
-  },
-  "MacKenzie MacEachern": {
-    "team": "VAN",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/mackenzie-maceachern"
-  },
-  "Mikael Pyyhtia": {
+  "Jack Thompson": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/mikael-pyyhtia"
+    "url": "/player/jack-thompson"
   },
-  "Connor Brown": {
-    "team": "NJD",
+  "Kurtis MacDermid": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/kurtis-macdermid"
+  },
+  "Max Domi": {
+    "team": "TOR",
+    "reason": "травма спины",
+    "url": "/player/max-domi"
+  },
+  "Andre Burakovsky": {
+    "team": "OTT",
     "reason": "характер травмы не разглашается",
-    "url": "/player/connor-brown"
+    "url": "/player/andre-burakovsky"
+  },
+  "Aidan Thompson": {
+    "team": "NYR",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/aidan-thompson"
+  },
+  "Ian Moore": {
+    "team": "ANA",
+    "reason": "травма нижней части тела",
+    "url": "/player/ian-moore"
+  },
+  "Adam Sýkora": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/adam-sykora"
+  },
+  "Caleb MacDonald": {
+    "team": "CBJ",
+    "reason": "травма нижней части тела",
+    "url": "/player/caleb-macdonald"
+  },
+  "Chase Stillman": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/chase-stillman"
+  },
+  "Yanni Gourde": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/yanni-gourde"
+  },
+  "Matthew Poitras": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/matthew-poitras"
   },
   "Jason Dickinson": {
     "team": "EDM",
     "reason": "характер травмы не разглашается",
     "url": "/player/jason-dickinson"
   },
-  "Jake Sanderson": {
-    "team": "OTT",
+  "William Villeneuve": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/william-villeneuve"
+  },
+  "Mathew Barzal": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/mathew-barzal"
+  },
+  "Carter Bear": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/carter-bear"
+  },
+  "Nick Bjugstad": {
+    "team": "NJD",
+    "reason": "Pectoral",
+    "url": "/player/nick-bjugstad"
+  },
+  "Cameron Lund": {
+    "team": "SJS",
+    "reason": "травма верхней части тела",
+    "url": "/player/cameron-lund"
+  },
+  "Alex Barre-Boulet": {
+    "team": "SJS",
     "reason": "характер травмы не разглашается",
-    "url": "/player/jake-sanderson"
+    "url": "/player/alex-barre-boulet"
   },
-  "Corey Perry": {
+  "Dylan Larkin": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/corey-perry"
+    "url": "/player/dylan-larkin"
   },
-  "Akil Thomas": {
+  "Andrei Kuzmenko": {
     "team": "UNK",
     "reason": "",
-    "url": "/player/akil-thomas"
+    "url": "/player/andrei-kuzmenko"
+  },
+  "Connor Hellebuyck": {
+    "team": "WPG",
+    "reason": "Suspension",
+    "url": "/player/connor-hellebuyck"
+  },
+  "Drew Helleson": {
+    "team": "ANA",
+    "reason": "травма нижней части тела",
+    "url": "/player/drew-helleson"
+  },
+  "MacKenzie MacEachern": {
+    "team": "VAN",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/mackenzie-maceachern"
+  },
+  "Alex Lyon": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/alex-lyon"
+  },
+  "Andreas Englund": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/andreas-englund"
+  },
+  "Simon Edvinsson": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/simon-edvinsson"
+  },
+  "Melvin Fernström": {
+    "team": "PIT",
+    "reason": "характер травмы не разглашается",
+    "url": "/player/melvin-fernstrom"
+  },
+  "Thatcher Demko": {
+    "team": "VAN",
+    "reason": "травма бедра",
+    "url": "/player/thatcher-demko"
+  },
+  "Walker Duehr": {
+    "team": "UNK",
+    "reason": "",
+    "url": "/player/walker-duehr"
   },
   "Brad Marchand": {
     "team": "FLA",
     "reason": "травма нижней части тела",
     "url": "/player/brad-marchand"
-  },
-  "Patrick Giles": {
-    "team": "SJS",
-    "reason": "травма верхней части тела",
-    "url": "/player/patrick-giles"
-  },
-  "Matt Duchene": {
-    "team": "DAL",
-    "reason": "характер травмы не разглашается",
-    "url": "/player/matt-duchene"
   }
 }
