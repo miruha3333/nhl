@@ -4,8 +4,8 @@
     "last_id": "10836"
   },
   "trades": {
-    "last_date": "2026-09-28",
-    "last_id": "1206"
+    "last_date": "2026-10-01",
+    "last_id": "1207"
   },
   "waivers": {
     "current": [
@@ -14,37 +14,37 @@
       "⬅️ Michael Pezzetta (TOR) прошел драфт отказов"
     ],
     "seen": [
-      "Cayden Primeau",
-      "Viktor Neuchev",
-      "Nathan Gaucher",
-      "Pheonix Copley",
-      "John Hayden",
-      "Vincent Iorio",
-      "Navrin Mutter",
-      "Henri Jokiharju",
-      "Chris Kreider",
-      "Zachary Sawchenko",
-      "Ronan Seeley",
-      "James Hamblin",
-      "James Malatesta",
-      "Jacob Bryson",
-      "Travis Mitchell",
-      "Clay Stevenson",
-      "Laurent Brossoit",
-      "Tyson Jost",
-      "Cameron Butler",
-      "Jon-Randall Avon",
       "Jack Ahcan",
-      "Marc-Andre Gaudet",
-      "Michael Pezzetta",
-      "Conor Sheary",
-      "Maxence Guenette",
+      "James Malatesta",
+      "Ronan Seeley",
+      "Travis Mitchell",
       "Lukas Reichel",
+      "Maxence Guenette",
+      "Vincent Iorio",
+      "Michael Pezzetta",
+      "Chris Kreider",
+      "Pheonix Copley",
+      "Nathan Gaucher",
+      "Navrin Mutter",
+      "Zachary Sawchenko",
       "Sean Farrell",
+      "Viktor Neuchev",
       "Miles Wood",
-      "Alex Steeves",
+      "Cayden Primeau",
+      "Jon-Randall Avon",
+      "Brandon Halverson",
+      "Henri Jokiharju",
+      "John Hayden",
+      "Clay Stevenson",
+      "Marc-Andre Gaudet",
+      "Laurent Brossoit",
+      "Conor Sheary",
       "Derrick Pouliot",
-      "Brandon Halverson"
+      "James Hamblin",
+      "Tyson Jost",
+      "Jacob Bryson",
+      "Alex Steeves",
+      "Cameron Butler"
     ]
   }
 }
