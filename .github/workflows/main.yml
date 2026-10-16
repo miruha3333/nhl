@@ -1,11 +1,9 @@
 name: Run Hockey Parser
 
 on:
-  schedule:
-    # 17:00-23:00 МСК = 14:00-20:00 UTC
-    - cron: '0 14,15,16,17,18,19,20 * * *'
-    # 00:00-07:00 МСК = 21:00 UTC (пн-сб) и 22:00-04:00 UTC
-    - cron: '0 21,22,23,0,1,2,3,4 * * *'
+  # Этот триггер ждет сигнал от внешнего сервиса (cron-job.org)
+  repository_dispatch:
+    types: [run_watcher]
   workflow_dispatch:
 
 jobs:
