@@ -86,209 +86,13 @@ INJURY_MAPPING = {
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
-AHL_TEAM_MAPPING = {
-    'chicago': 'CAR', 'colorado': 'COL', 'henderson': 'VGK', 'laval': 'MTL', 'springfield': 'STL',
-    'toronto': 'TOR', 'belleville': 'OTT', 'utica': 'VAN', 'san jose': 'SJS', 'san diego': 'ANA',
-    'bakersfield': 'EDM', 'abbotsford': 'VAN', 'iowa': 'MIN', 'milwaukee': 'NAS', 'cleveland': 'CBJ',
-    'grand rapids': 'DET', 'charlotte': 'FLA', 'hershey': 'WSH', 'lehigh valley': 'PHI', 'hartford': 'NYR',
-    'bridgeport': 'NYI', 'binghamton': 'NJD', 'rockford': 'CHI', 'texas': 'DAL', 'coachella': 'SEA',
-    'providence': 'BOS', 'rochester': 'BUF', 'syracuse': 'TBL', 'manitoba': 'WPG', 'ontario': 'LAK',
-    'stockton': 'CGY', 'calgary wranglers': 'CGY', 'wranglers': 'CGY', 'tucson': 'UTAH', 'wilkes': 'PIT',
-    'lehigh': 'PHI', 'new jersey': 'NJD', 'pittsburgh': 'PIT', 'seattle': 'SEA',
-}
-
-GAMES_WORD_MAP = {
-    'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
-    'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10'
-}
-
 NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.json"
-TRANSACTIONS_CACHE_FILE = "transactions_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 INJURIES_MIN_COUNT = 50
 
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
-TRANSACTIONS_API = "https://puckpedia.com/data/api_transactions?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_transactions%22%2C%22url%22%3A%22transactions%22%2C%22transaction_type%22%3A%22roster%22%2C%22defaultSort%22%3A%22sort_date%22%2C%22sortBy%22%3A%22sort_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
-
-
-def normalize_games(text):
-    def replace_word(m):
-        word = m.group(1).lower()
-        num = GAMES_WORD_MAP.get(word, word)
-        count = int(num) if num.isdigit() else 1
-        if count == 1:
-            return f"{num} игру"
-        elif 2 <= count <= 4:
-            return f"{num} игры"
-        else:
-            return f"{num} игр"
-    text = re.sub(r'\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+games?\b', replace_word, text, flags=re.I)
-    text = re.sub(r'\b(\d+)\s+games?\b', lambda m: (
-        f"{m.group(1)} игру" if m.group(1) == '1'
-        else f"{m.group(1)} игры" if int(m.group(1)) in (2, 3, 4)
-        else f"{m.group(1)} игр"
-    ), text)
-    return text
-
-
-def get_ahl_nhl_abbr(ahl_city_raw):
-    key = ahl_city_raw.lower().strip()
-    if key in AHL_TEAM_MAPPING:
-        return AHL_TEAM_MAPPING[key]
-    for k, v in AHL_TEAM_MAPPING.items():
-        if k in key or key in k:
-            return v
-    return ""
-
-
-def clean_league_prefix(text):
-    text = re.sub(
-        r'\b(Swedish|Finnish|Russian|Swiss|German|Czech|Slovak|Austrian|Danish|Norwegian|KHL|SHL|Liiga|DEL|NL|ICEHL)\s+club\s+',
-        '', text, flags=re.I)
-    text = re.sub(
-        r'\b(Swedish|Finnish|Russian|Swiss|German|Czech|Slovak|Austrian|Danish|Norwegian)\s+',
-        '', text, flags=re.I)
-    return text.strip()
-
-
-TRANSACTION_PATTERNS = [
-    (re.compile(r'(\w+)\s+was (?:reassigned|sent) to AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
-     lambda m: (m.group(1), 'ahl_to', m.group(2).strip())),
-    (re.compile(r'(\w+)\s+was (?:recalled|promoted|called up|brought up|summoned|elevated)\s+from AHL (\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s+per\b|\s*,|\s*\.)', re.I),
-     lambda m: (m.group(1), 'ahl_from', m.group(2).strip())),
-    (re.compile(r'(\w+)\s+was elevated from the minors', re.I),
-     lambda m: (m.group(1), 'minors_from', '')),
-    (re.compile(r'(\w+)\s+was summoned by (?:the\s+)?(.+?) from (?:OHL|WHL|QMJHL|AHL|ECHL)\s+(\w[\w\s\-]+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: (m.group(1), 'summoned_by', m.group(3).strip())),
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?injured reserve|IR\b', re.I),
-     lambda m: (m.group(1), 'placed_ir', '')),
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?(?:long-term\s+)?(?:injured reserve|IR\b)', re.I),
-     lambda m: (m.group(1), 'activated_ir', '')),
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?will be activated from (?:long-term\s+)?(?:injured reserve|LTIR)\b', re.I),
-     lambda m: (m.group(1), 'will_activated_ltir', '')),
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?placed on (?:the\s+)?LTIR\b', re.I),
-     lambda m: (m.group(1), 'placed_ltir', '')),
-    (re.compile(r'(\w+)\s+(?:\([^)]+\)\s+)?(?:has been |was )?activated from (?:the\s+)?LTIR\b', re.I),
-     lambda m: (m.group(1), 'activated_ltir', '')),
-    (re.compile(r'(\w+)\s+was suspended for ([\w\s]+?games?)\b', re.I),
-     lambda m: (m.group(1), 'suspended', normalize_games(m.group(2).strip()))),
-    (re.compile(r'(\w+)\s+is eligible to play', re.I),
-     lambda m: (m.group(1), 'eligible', '')),
-    (re.compile(r'(\w+)\s+(?:has been |was )?claimed (?:off waivers\s+)?by (?:the\s+)?(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: (m.group(1), 'claimed', m.group(2).strip())),
-    (re.compile(r'(\w+)\s+(?:has\s+)?cleared waivers', re.I),
-     lambda m: (m.group(1), 'cleared_waivers', '')),
-    (re.compile(r'(\w+)\s+(?:has been |was )?released\b', re.I),
-     lambda m: (m.group(1), 'released', '')),
-    (re.compile(r'(\w+)\s+(?:announced|is)\s+.{0,40}(?:retiring|retirement|ending his playing career)', re.I),
-     lambda m: (m.group(1), 'retiring', '')),
-    (re.compile(r'(\w+)\s+(?:has been |was )?loaned to (.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: (m.group(1), 'loaned', clean_league_prefix(m.group(2).strip()))),
-    (re.compile(r'(\w+)\s+(?:has been |was )?signed (?:to\s+)?(?:a\s+)?PTO\b', re.I),
-     lambda m: (m.group(1), 'pto', '')),
-    (re.compile(r'(\w+)\s+(?:agreed to terms on (?:a\s+)?contract with|signed (?:a\s+)?contract with)\s+(.+?)(?:\s+on\s+\w+day|\s*\.|\s*,)', re.I),
-     lambda m: (m.group(1), 'foreign_contract', clean_league_prefix(m.group(2).strip()))),
-    (re.compile(r'(\w+)\s+committed to (?:the\s+)?(.+?)(?:\s+ahead of|\s+for the|\s+on\s+\w+day|\s*\.)', re.I),
-     lambda m: (m.group(1), 'committed', m.group(2).strip())),
-    (re.compile(r'(\w+)\s+(?:has been |was )?assigned to (?:the\s+)?AHL\b', re.I),
-     lambda m: (m.group(1), 'assigned_ahl', '')),
-]
-
-
-def build_transaction_line(parsed):
-    name, action, arg = parsed
-    if action == 'ahl_to':
-        ahl_abbr = get_ahl_nhl_abbr(arg)
-        abbr_str = f" ({ahl_abbr})" if ahl_abbr else ""
-        return f"{name} переведён в АХЛ ({arg}){abbr_str}"
-    elif action == 'ahl_from':
-        ahl_abbr = get_ahl_nhl_abbr(arg)
-        abbr_str = f" ({ahl_abbr})" if ahl_abbr else ""
-        return f"{name} вызван из АХЛ ({arg}){abbr_str}"
-    elif action == 'minors_from':
-        return f"{name} вызван из минорных лиг"
-    elif action == 'summoned_by':
-        return f"{name} вызван из {arg}"
-    elif action == 'placed_ir':
-        return f"{name} переведён в список травмированных"
-    elif action == 'activated_ir':
-        return f"{name} activated из списка травмированных"
-    elif action == 'will_activated_ltir':
-        return f"{name} будет активирован из долгосрочного списка травмированных"
-    elif action == 'placed_ltir':
-        return f"{name} переведён в долгосрочный список травмированных (LTIR)"
-    elif action == 'activated_ltir':
-        return f"{name} активирован из долгосрочного списка травмированных (LTIR)"
-    elif action == 'suspended':
-        return f"{name} дисквалифицирован на {arg}"
-    elif action == 'eligible':
-        return f"{name} вернулся после дисквалификации"
-    elif action == 'claimed':
-        return f"{name} подобран с драфта отказов командой {arg}"
-    elif action == 'cleared_waivers':
-        return f"{name} прошёл драфт отказов"
-    elif action == 'released':
-        return f"{name} освобождён"
-    elif action == 'retiring':
-        return f"{name} завершает карьеру"
-    elif action == 'loaned':
-        return f"{name} отдан в аренду ({arg})"
-    elif action == 'pto':
-        return f"{name} подписан на пробный контракт (PTO)"
-    elif action == 'foreign_contract':
-        return f"{name} подписал контракт с {arg}"
-    elif action == 'committed':
-        return f"{name} переходит в студенческую команду {arg}"
-    elif action == 'assigned_ahl':
-        return f"{name} направлен в АХЛ"
-    return ""
-
-
-def translate_transaction(raw_text):
-    text = re.sub(r'<[^>]+>', '', raw_text).strip()
-    try:
-        translated = GoogleTranslator(source='en', target='ru').translate(text)
-        translated = translated.replace(" для выбора ", " за выбор ")
-        translated = translated.replace(" для выборов ", " за выборы ")
-        translated = translated.replace(" для двух выборов ", " за два выбора ")
-        translated = translated.replace(" для выбора", " за выбор")
-        return translated
-    except Exception:
-        for pattern, extractor in TRANSACTION_PATTERNS:
-            m = pattern.search(text)
-            if m:
-                try:
-                    parsed = extractor(m)
-                    result = build_transaction_line(parsed)
-                    if result:
-                        return result
-                except Exception:
-                    continue
-        return text
-
-
-def load_transactions_cache():
-    default = {"last_date": "", "last_id": "", "recent": []}
-    if not os.path.exists(TRANSACTIONS_CACHE_FILE):
-        return default
-    try:
-        with open(TRANSACTIONS_CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return default
-        for k, v in default.items():
-            if k not in data:
-                data[k] = v
-        return data
-    except Exception:
-        return default
-
-
-def save_transactions_cache(cache):
-    with open(TRANSACTIONS_CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
 def load_injuries_snapshot():
@@ -377,14 +181,6 @@ def extract_player_name(line):
     return clean.split("(")[0].strip()
 
 
-def get_rus_team_data(eng_name):
-    clean_name = eng_name.strip()
-    for key, value in RUS_TEAM_MAPPING.items():
-        if clean_name.lower() in key.lower():
-            return value
-    return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
-
-
 def send_to_telegram(text):
     token = os.environ.get("TG_TOKEN")
     chat_id = os.environ.get("TG_CHAT_ID")
@@ -464,6 +260,14 @@ def translate_trade(text):
         return text
 
 
+def get_rus_team_data(eng_name):
+    clean_name = eng_name.strip()
+    for key, value in RUS_TEAM_MAPPING.items():
+        if clean_name.lower() in key.lower():
+            return value
+    return {'main': f"{clean_name} обменял", 'from': f"из {clean_name}"}
+
+
 def translate_injury(raw):
     return INJURY_MAPPING.get(raw.lower().strip(), raw)
 
@@ -540,7 +344,6 @@ async def get_team_from_profile(page, player_url):
 async def main():
     raw_signings = []
     raw_trades = []
-    raw_transactions = []
     current_waivers = []
     current_injury_names_all = set()
     current_injury_urls = {}
@@ -568,12 +371,6 @@ async def main():
         await page.goto("https://puckpedia.com/trades", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
-
-        # --- ТРАНЗАКЦИИ ---
-        print("Открываем страницу транзакций...")
-        await page.goto("https://puckpedia.com/transactions?transaction_type=roster", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(10)
-        raw_transactions = await fetch_api(page, TRANSACTIONS_API, "Транзакции")
 
         # --- ТРАВМЫ ---
         print("Открываем страницу травм...")
@@ -764,49 +561,6 @@ async def main():
     if raw_trades:
         cache["trades"]["last_date"] = str(raw_trades[0].get("trade_date", "") or "")
         cache["trades"]["last_id"] = str(raw_trades[0].get("trade_id", "") or "")
-
-    # --- ТРАНЗАКЦИИ ---
-    tx_cache = load_transactions_cache()
-    last_tx_date = tx_cache.get("last_date", "")
-    last_tx_id = tx_cache.get("last_id", "")
-
-    all_tx_lines_for_recent = []
-    for item in raw_transactions[:5]:
-        raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
-        if raw_text and len(raw_text) >= 10:
-            all_tx_lines_for_recent.append(translate_transaction(raw_text))
-    tx_cache["recent"] = all_tx_lines_for_recent
-    print(f"  recent обновлён: {all_tx_lines_for_recent}")
-
-    new_transactions_raw = []
-    for item in raw_transactions:
-        item_date = str(item.get("sort_date", "") or item.get("transaction_date", "") or "")
-        item_id = str(item.get("transaction_id", "") or item.get("id", "") or "")
-        if item_date > last_tx_date:
-            new_transactions_raw.append(item)
-        elif item_date == last_tx_date and item_id and item_id != last_tx_id:
-            new_transactions_raw.append(item)
-        else:
-            break
-
-    print(f"Новых транзакций: {len(new_transactions_raw)}")
-    seen_tx = set()
-    for item in new_transactions_raw:
-        raw_text = str(item.get('details', '') or item.get('details_nolinks', '') or '').strip()
-        if not raw_text or len(raw_text) < 10:
-            continue
-        translated = translate_transaction(raw_text)
-        if translated not in seen_tx:
-            seen_tx.add(translated)
-            all_new.append(f"🏒 {translated}")
-
-    if raw_transactions:
-        first = raw_transactions[0]
-        tx_cache["last_date"] = str(first.get("sort_date", "") or first.get("transaction_date", "") or "")
-        tx_cache["last_id"] = str(first.get("transaction_id", "") or first.get("id", "") or "")
-
-    save_transactions_cache(tx_cache)
-    commit_file(TRANSACTIONS_CACHE_FILE, "Обновление кэша транзакций")
 
     # --- ТРАВМЫ ---
     if injuries_loaded_ok:
