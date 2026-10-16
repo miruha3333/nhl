@@ -4,8 +4,11 @@ import re
 import subprocess
 import requests
 import json
+from flask import Flask, jsonify
 from playwright.async_api import async_playwright
 from deep_translator import GoogleTranslator
+
+app = Flask(__name__)
 
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
@@ -86,7 +89,6 @@ INJURY_MAPPING = {
 
 WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
 
-NAV_LINKS_COUNT = 64
 CACHE_FILE = "last_data_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 INJURIES_MIN_COUNT = 50
@@ -334,31 +336,25 @@ async def get_team_from_profile(page, player_url):
         await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(1.5)
         
-        # Ищем картинку логотипа команды по подсказке в alt (например, "Wild logo.")
         logo_alt = await page.eval_on_selector(
             "div.inline-block.flex-none.mr-1 img.logo-md",
             "el => el ? el.getAttribute('alt') : ''"
         )
         
         if logo_alt:
-            # Извлекаем название команды до слова "logo" (например, "Wild logo." -> "wild")
             clean_alt = logo_alt.lower().replace("logo", "").replace(".", "").strip()
-            
-            # Проверяем по вашему словарю аббревиатур
             for team_key, abbr in TEAM_MAPPING_ABBR.items():
                 if team_key in clean_alt or clean_alt in team_key:
                     return f"({abbr})"
-            
-            # Если не нашлось в словаре, возвращаем первые 3 буквы капслоком в скобках
             return f"({clean_alt[:3].upper()})"
             
     except Exception as e:
         print(f"  Ошибка при определении команды из профиля: {e}")
         
-    return "UNK"
+    return "(UNK)"
 
 
-async def main():
+async def run_parser_logic():
     raw_signings = []
     raw_trades = []
     current_waivers = []
@@ -429,9 +425,9 @@ async def main():
                 raw_injury_entries.append((name, reason, player_url))
 
             for name, reason, player_url in raw_injury_entries:
-                team_abbr = await get_team_from_profile(page, player_url) if player_url else "UNK"
+                team_abbr = await get_team_from_profile(page, player_url) if player_url else "(UNK)"
                 current_injuries_top.append((name, team_abbr, reason, player_url))
-                print(f"  Топ-3: {name} ({team_abbr}), {reason}")
+                print(f"  Топ-3: {name} {team_abbr}, {reason}")
 
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
@@ -447,8 +443,8 @@ async def main():
                             rus_name = GoogleTranslator(source='en', target='ru').translate(name)
                         except Exception:
                             rus_name = name
-                        line = (f"✅ {rus_name} ({team_abbr}) активирован из списка травмированных"
-                                if team_abbr and team_abbr != "UNK"
+                        line = (f"✅ {rus_name} {team_abbr} активирован из списка травмированных"
+                                if team_abbr and team_abbr != "(UNK)"
                                 else f"✅ {rus_name} активирован из списка травмированных")
                     else:
                         try:
@@ -591,7 +587,7 @@ async def main():
                         rus_name = GoogleTranslator(source='en', target='ru').translate(name)
                     except Exception:
                         rus_name = name
-                    all_new.append(f"❌ {rus_name} ({team_abbr}), {reason}")
+                    all_new.append(f"❌ {rus_name} {team_abbr}, {reason}")
                     print(f"  Новая травма: {name}")
             all_new.extend(recovered_lines)
 
@@ -604,7 +600,7 @@ async def main():
             elif name in prev_snapshot:
                 new_snapshot[name] = prev_snapshot[name]
             else:
-                new_snapshot[name] = {"team": "UNK", "reason": "", "url": current_injury_urls.get(name, "")}
+                new_snapshot[name] = {"team": "(UNK)", "reason": "", "url": current_injury_urls.get(name, "")}
 
         save_injuries_snapshot(new_snapshot)
         commit_file(INJURIES_SNAPSHOT_FILE, "Обновление снапшота травм")
@@ -644,5 +640,20 @@ async def main():
     print(f"Отправлено {len(all_new)} новых записей в Telegram.")
 
 
+@app.route("/run-parser", methods=["GET", "POST"])
+def run_parser_endpoint():
+    try:
+        asyncio.run(run_parser_logic())
+        return jsonify({"status": "success", "message": "Parser executed successfully"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return "PuckPedia Parser Bot is running!", 200
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
