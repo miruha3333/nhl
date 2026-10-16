@@ -330,14 +330,31 @@ async def fetch_api(page, url, label):
 
 
 async def get_team_from_profile(page, player_url):
-    await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
-    await asyncio.sleep(1.5)
-    all_team_links = await page.eval_on_selector_all(
-        "a[href*='/team/']",
-        "els => els.map(e => e.getAttribute('href'))"
-    )
-    if len(all_team_links) > NAV_LINKS_COUNT:
-        return get_team_abbr_by_slug(all_team_links[NAV_LINKS_COUNT])
+    try:
+        await page.goto(f"https://puckpedia.com{player_url}", wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(1.5)
+        
+        # Ищем картинку логотипа команды по подсказке в alt (например, "Wild logo.")
+        logo_alt = await page.eval_on_selector(
+            "div.inline-block.flex-none.mr-1 img.logo-md",
+            "el => el ? el.getAttribute('alt') : ''"
+        )
+        
+        if logo_alt:
+            # Извлекаем название команды до слова "logo" (например, "Wild logo." -> "wild")
+            clean_alt = logo_alt.lower().replace("logo", "").replace(".", "").strip()
+            
+            # Проверяем по вашему словарю аббревиатур
+            for team_key, abbr in TEAM_MAPPING_ABBR.items():
+                if team_key in clean_alt or clean_alt in team_key:
+                    return f"({abbr})"
+            
+            # Если не нашлось в словаре, возвращаем первые 3 буквы капслоком в скобках
+            return f"({clean_alt[:3].upper()})"
+            
+    except Exception as e:
+        print(f"  Ошибка при определении команды из профиля: {e}")
+        
     return "UNK"
 
 
