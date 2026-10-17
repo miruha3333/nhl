@@ -1,13 +1,14 @@
-name: Run Hockey Parser
+name: Hockey News Parser
 
 on:
-  # Этот триггер ждет сигнал от внешнего сервиса (cron-job.org)
-  repository_dispatch:
-    types: [run_watcher]
-  workflow_dispatch:
+  schedule:
+    # Запуск каждые 15 минут (можно настроить под свои нужды)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Возможность запустить вручную через кнопку в GitHub
 
 jobs:
   check:
+    name: Check for Changes (Watcher)
     runs-on: ubuntu-latest
     outputs:
       changes: ${{ steps.watcher.outputs.changes }}
@@ -20,16 +21,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install watcher dependencies
+      - name: Install dependencies for watcher
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests beautifulsoup4
 
       - name: Run watcher script
         id: watcher
         run: python watcher.py
 
   parse:
+    name: Run Main Parser (Sportac)
     needs: check
     if: needs.check.outputs.changes == 'true'
     runs-on: ubuntu-latest
@@ -42,10 +44,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Python dependencies
+      - name: Install dependencies for parser
         run: |
           python -m pip install --upgrade pip
-          pip install playwright requests deep-translator flask
+          pip install playwright requests deep-translator beautifulsoup4
 
       - name: Install Playwright Browsers
         run: |
