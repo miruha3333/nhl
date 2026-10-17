@@ -4,11 +4,9 @@ import re
 import subprocess
 import requests
 import json
-from flask import Flask, jsonify
+from datetime import datetime
 from playwright.async_api import async_playwright
 from deep_translator import GoogleTranslator
-
-app = Flask(__name__)
 
 TEAM_MAPPING_ABBR = {
     'utah': 'UTAH', 'mammoth': 'UTAH', 'blue jackets': 'CBJ', 'bluejackets': 'CBJ',
@@ -84,11 +82,16 @@ INJURY_MAPPING = {
     "personal": "личная причина", "finger": "травма пальца", "thumb": "травма большого пальца",
     "lower leg": "травма голени", "achilles": "травма ахилла", "arm": "травма руки",
     "back": "травма спины", "knee": "травма колена", "neck": "травма шеи", "wrist": "травма запястья",
-    "illness": "болезнь", "elbow": "травма локтя", "chest": "травма грудной клетки", 
-    "Not Injury Related": "Отсутствие, не связанное с травмой"
+    "illness": "болезнь", "elbow": "травма локтя", "chest": "травма грудной клетки",
+    "not injury related": "причина не связана с травмой"
 }
 
-WAIVER_MAPPING = {"cleared": "прошел драфт отказов", "claimed": "забран с драфта отказов"}
+WAIVER_MAPPING = {
+    "cleared": "прошел драфт отказов",
+    "claimed": "забран с драфта отказов",
+    "placed": "выставлен на драфт отказов",
+    "on waivers": "выставлен на драфт отказов"
+}
 
 CACHE_FILE = "last_data_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
@@ -179,9 +182,9 @@ def commit_cache():
 
 def extract_player_name(line):
     clean = line
-    for emoji in ["❌", "✅", "⬆️", "⬅️", "➡️", "📝", "🔄", "🏒"]:
+    for emoji in ["❌", "✅", "⬆️", "⬅️", "➡️", "📝", "🔄", "🏒", "📋", "*"]:
         clean = clean.replace(emoji, "")
-    return clean.split("(")[0].strip()
+    return clean.split("(")[0].split("—")[0].strip()
 
 
 def send_to_telegram(text):
@@ -194,7 +197,11 @@ def send_to_telegram(text):
     parts = [text[i:i+max_len] for i in range(0, len(text), max_len)]
     for part in parts:
         try:
-            requests.post(url, data={"chat_id": chat_id, "text": part}, timeout=15)
+            requests.post(url, data={
+                "chat_id": chat_id, 
+                "text": part,
+                "parse_mode": "Markdown"
+            }, timeout=15)
         except Exception as e:
             print(f"Ошибка отправки: {e}")
 
@@ -386,10 +393,9 @@ async def run_parser_logic():
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
-       # --- ТРАВМЫ ---
+        # --- ТРАВМЫ ---
         print("Открываем страницу травм...")
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
-        # Ждем загрузки таблицы DOM
         try:
             await page.wait_for_selector("tr:has(a.pp_link[href*='/player/'])", timeout=15000)
         except Exception:
@@ -417,7 +423,6 @@ async def run_parser_logic():
         if len(current_injury_names_all) >= INJURIES_MIN_COUNT:
             injuries_loaded_ok = True
             raw_injury_entries = []
-            # Обрабатываем ВСЕ строки из таблицы (или первые 15-20 самых свежих)
             for row in all_player_rows[:15]:
                 cells = await row.query_selector_all("td")
                 if not cells:
@@ -428,51 +433,67 @@ async def run_parser_logic():
                 player_url = await name_link.get_attribute("href")
                 name = format_name((await name_link.inner_text()).strip())
                 
-                # Текст причины травмы
+                team_abbr = ""
+                if len(cells) > 1:
+                    team_text = (await cells[1].inner_text()).strip()
+                    team_abbr = get_team_abbr_by_name(team_text)
+                if not team_abbr or team_abbr == "(UNK)":
+                    team_abbr = await get_team_from_profile(page, player_url) if player_url else "(UNK)"
+                
                 reason_cell = cells[3] if len(cells) > 3 else (cells[2] if len(cells) > 2 else None)
                 reason_raw = (await reason_cell.inner_text()).strip() if reason_cell else ""
                 reason = translate_injury(reason_raw) if reason_raw else "характер травмы не разглашается"
                 
-                raw_injury_entries.append((name, reason, player_url))
+                raw_injury_entries.append((name, team_abbr, reason, player_url))
 
-            for name, reason, player_url in raw_injury_entries:
-                current_injuries_top.append((name, "(NHL)", reason, player_url))
+            for name, team_abbr, reason, player_url in raw_injury_entries:
+                current_injuries_top.append((name, team_abbr, reason, player_url))
+                print(f"  Топ травм: {name} {team_abbr}, {reason}")
 
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
             recovered = prev_names - current_injury_names_all
 
-       # --- УЭЙВЕР ---
+            if recovered and len(prev_names) > 0:
+                print(f"  Выздоровевших: {len(recovered)}")
+                for name in sorted(recovered):
+                    player_url = prev_snapshot[name].get("url", "")
+                    team_abbr = ""
+                    if player_url:
+                        team_abbr = await get_team_from_profile(page, player_url)
+                    try:
+                        rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                    except Exception:
+                        rus_name = name
+                    
+                    line = (f"✅ **{rus_name}** {team_abbr} активирован из списка травмированных"
+                            if team_abbr and team_abbr != "(UNK)"
+                            else f"✅ **{rus_name}** активирован из списка травмированных")
+                    recovered_lines.append(line)
+                    print(f"  Выздоровление: {line}")
+        else:
+            print(f"  ЗАЩИТА: список травм мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок пропускается.")
+            prev_snapshot = load_injuries_snapshot()
+            prev_names = set(prev_snapshot.keys())
+
+        # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
         await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(3)
-        
-        # Обновленный словарь статусов
-        WAIVER_MAPPING = {
-            "cleared": "прошел драфт отказов",
-            "claimed": "забран с драфта отказов",
-            "placed": "выставлен на драфт отказов",
-            "on waivers": "выставлен на драфт отказов"
-        }
-
         rows = await page.query_selector_all("tr")
         count = 0
-        from datetime import datetime
-
         for row in rows:
             cells = await row.query_selector_all("td")
             if len(cells) >= 3:
-                raw_name = format_name((await cells[0].inner_text()).strip())
+                name = format_name((await cells[0].inner_text()).strip())
                 team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
                 team_abbr = get_team_abbr_by_slug(team_full)
                 res = (await cells[2].inner_text()).strip().lower()
                 
-                # Получаем и форматируем дату (если дата есть в 4-й ячейке, иначе берем текущую)
                 date_str = ""
                 if len(cells) >= 4:
                     raw_date = (await cells[3].inner_text()).strip()
                     try:
-                        # Попытка распарсить стандартный формат даты PuckPedia
                         parsed_date = datetime.strptime(raw_date, "%b %d, %Y")
                         date_str = parsed_date.strftime("%d.%m.%Y")
                     except Exception:
@@ -484,12 +505,16 @@ async def run_parser_logic():
                 waiver_text = WAIVER_MAPPING.get(res, "выставлен на драфт отказов" if "placed" in res or "waiver" in res else res)
                 emoji = "⬆️" if res == "claimed" else ("⬅️" if res == "cleared" else "📋")
                 
-                # Формируем итоговую строку с жирным именем и новой датой
-                line = f"{emoji} **{raw_name}** ({team_abbr}) — {date_str} — {waiver_text}"
+                try:
+                    rus_name = GoogleTranslator(source='en', target='ru').translate(name)
+                except Exception:
+                    rus_name = name
+
+                line = f"{emoji} **{rus_name}** ({team_abbr}) — {date_str} — {waiver_text}"
                 current_waivers.append(line)
                 print(f"  Уэйвер: {line}")
                 count += 1
-                if count >= 10:  # Проверяем последние 10 записей
+                if count >= 10:
                     break
 
         await browser.close()
@@ -550,7 +575,7 @@ async def run_parser_logic():
         except Exception:
             rus_name = name
             
-        line = f"📝 {rus_name} {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
+        line = f"📝 **{rus_name}** {ctype} {format_years(years)} с кэпхитом {format_cap_hit(cap_val)} {get_team_abbr_by_name(team_name)}"
         all_new.append(line)
 
     if raw_signings:
@@ -598,7 +623,7 @@ async def run_parser_logic():
                         rus_name = GoogleTranslator(source='en', target='ru').translate(name)
                     except Exception:
                         rus_name = name
-                    all_new.append(f"❌ {rus_name} {team_abbr}, {reason}")
+                    all_new.append(f"❌ **{rus_name}** {team_abbr}, {reason}")
                     print(f"  Новая травма: {name}")
             all_new.extend(recovered_lines)
 
@@ -626,12 +651,7 @@ async def run_parser_logic():
     for line in current_waivers:
         player_name = extract_player_name(line)
         if player_name and player_name not in seen_waiver_names:
-            try:
-                rus_name = GoogleTranslator(source='en', target='ru').translate(player_name)
-                translated_line = line.replace(player_name, rus_name)
-            except Exception:
-                translated_line = line
-            new_waivers.append(translated_line)
+            new_waivers.append(line)
             new_waiver_names.append(player_name)
 
     print(f"Новых уэйверов: {len(new_waivers)}")
@@ -649,20 +669,6 @@ async def run_parser_logic():
     message = "\n\n".join(all_new)
     send_to_telegram(message)
     print(f"Отправлено {len(all_new)} новых записей в Telegram.")
-
-
-@app.route("/run-parser", methods=["GET", "POST"])
-def run_parser_endpoint():
-    try:
-        asyncio.run(run_parser_logic())
-        return jsonify({"status": "success", "message": "Parser executed successfully"}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/", methods=["GET"])
-def index():
-    return "PuckPedia Parser Bot is running!", 200
 
 
 if __name__ == '__main__':
