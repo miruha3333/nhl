@@ -655,4 +655,4 @@ def index():
 
 
 if __name__ == '__main__':
-    main()  # Заменяем Flask-сервер на прямой вызов функции парсера
+    run_parser()
