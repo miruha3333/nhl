@@ -39,6 +39,7 @@ def main():
         except Exception:
             pass
 
+    # Проверка подписаний
     try:
         resp = requests.get(SIGNINGS_API, headers=headers, timeout=15)
         if resp.status_code == 200:
@@ -47,11 +48,16 @@ def main():
                 first = items[0]
                 item_date = str(first.get("sign_date", "") or "")
                 item_id = str(first.get("cid", "") or first.get("id", "") or "")
-                if item_date > cache.get("signings", {}).get("last_date", ""):
+                last_date = cache.get("signings", {}).get("last_date", "")
+                last_id = cache.get("signings", {}).get("last_id", "")
+                print(f"API Signings: с сайта дата '{item_date}' (id: {item_id}), в кэше дата '{last_date}' (id: {last_id})")
+                if item_date > last_date or (item_date == last_date and item_id and item_id != last_id):
+                    print("🔄 Найдены новые подписания!")
                     changes_detected = True
     except Exception as e:
-        print(f"Ошибка: {e}")
+        print(f"Ошибка проверки подписаний: {e}")
 
+    # Проверка трейдов
     if not changes_detected:
         try:
             resp = requests.get(TRADES_API, headers=headers, timeout=15)
@@ -61,16 +67,20 @@ def main():
                     first = items[0]
                     item_date = str(first.get("trade_date", "") or "")
                     item_id = str(first.get("trade_id", "") or "")
-                    if item_date > cache.get("trades", {}).get("last_date", ""):
+                    last_date = cache.get("trades", {}).get("last_date", "")
+                    last_id = cache.get("trades", {}).get("last_id", "")
+                    print(f"API Trades: с сайта дата '{item_date}' (id: {item_id}), в кэше дата '{last_date}' (id: {last_id})")
+                    if item_date > last_date or (item_date == last_date and item_id and item_id != last_id):
+                        print("🔄 Найдены новые трейды!")
                         changes_detected = True
-        except Exception as e:
-            print(f"Ошибка: {e}")
+    except Exception as e:
+        print(f"Ошибка проверки трейдов: {e}")
 
     if not changes_detected and not os.path.exists(CACHE_FILE):
+        print("📦 Кэш отсутствует, требуется запуск.")
         changes_detected = True
 
     if changes_detected:
-        print("🔄 Есть изменения!")
         set_github_output("changes", "true")
     else:
         print("💤 Изменений нет.")
