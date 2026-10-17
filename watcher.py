@@ -73,8 +73,8 @@ def main():
                     if item_date > last_date or (item_date == last_date and item_id and item_id != last_id):
                         print("🔄 Найдены новые трейды!")
                         changes_detected = True
-    except Exception as e:
-        print(f"Ошибка проверки трейдов: {e}")
+        except Exception as e:
+            print(f"Ошибка проверки трейдов: {e}")
 
     if not changes_detected and not os.path.exists(CACHE_FILE):
         print("📦 Кэш отсутствует, требуется запуск.")
