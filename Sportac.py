@@ -385,10 +385,14 @@ async def run_parser_logic():
         await asyncio.sleep(10)
         raw_trades = await fetch_api(page, TRADES_API, "Трейды")
 
-        # --- ТРАВМЫ ---
+       # --- ТРАВМЫ ---
         print("Открываем страницу травм...")
         await page.goto("https://puckpedia.com/injuries", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(2)
+        # Ждем загрузки таблицы DOM
+        try:
+            await page.wait_for_selector("tr:has(a.pp_link[href*='/player/'])", timeout=15000)
+        except Exception:
+            await asyncio.sleep(5)
 
         all_player_rows = await page.query_selector_all("tr:has(a.pp_link[href*='/player/'])")
         print(f"  Строк с игроками: {len(all_player_rows)}")
@@ -412,7 +416,8 @@ async def run_parser_logic():
         if len(current_injury_names_all) >= INJURIES_MIN_COUNT:
             injuries_loaded_ok = True
             raw_injury_entries = []
-            for row in all_player_rows[:3]:
+            # Обрабатываем ВСЕ строки из таблицы (или первые 15-20 самых свежих)
+            for row in all_player_rows[:15]:
                 cells = await row.query_selector_all("td")
                 if not cells:
                     continue
@@ -421,43 +426,20 @@ async def run_parser_logic():
                     continue
                 player_url = await name_link.get_attribute("href")
                 name = format_name((await name_link.inner_text()).strip())
-                reason = translate_injury((await cells[3].inner_text()).strip()) if len(cells) > 3 else "характер травмы не разглашается"
+                
+                # Текст причины травмы
+                reason_cell = cells[3] if len(cells) > 3 else (cells[2] if len(cells) > 2 else None)
+                reason_raw = (await reason_cell.inner_text()).strip() if reason_cell else ""
+                reason = translate_injury(reason_raw) if reason_raw else "характер травмы не разглашается"
+                
                 raw_injury_entries.append((name, reason, player_url))
 
             for name, reason, player_url in raw_injury_entries:
-                team_abbr = await get_team_from_profile(page, player_url) if player_url else "(UNK)"
-                current_injuries_top.append((name, team_abbr, reason, player_url))
-                print(f"  Топ-3: {name} {team_abbr}, {reason}")
+                current_injuries_top.append((name, "(NHL)", reason, player_url))
 
             prev_snapshot = load_injuries_snapshot()
             prev_names = set(prev_snapshot.keys())
             recovered = prev_names - current_injury_names_all
-
-            if recovered and len(prev_names) > 0:
-                print(f"  Выздоровевших: {len(recovered)}")
-                for name in sorted(recovered):
-                    player_url = prev_snapshot[name].get("url", "")
-                    if player_url:
-                        team_abbr = await get_team_from_profile(page, player_url)
-                        try:
-                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                        except Exception:
-                            rus_name = name
-                        line = (f"✅ {rus_name} {team_abbr} активирован из списка травмированных"
-                                if team_abbr and team_abbr != "(UNK)"
-                                else f"✅ {rus_name} активирован из списка травмированных")
-                    else:
-                        try:
-                            rus_name = GoogleTranslator(source='en', target='ru').translate(name)
-                        except Exception:
-                            rus_name = name
-                        line = f"✅ {rus_name} активирован из списка травмированных"
-                    recovered_lines.append(line)
-                    print(f"  Выздоровление: {line}")
-        else:
-            print(f"  ЗАЩИТА: список травм мал ({len(current_injury_names_all)} < {INJURIES_MIN_COUNT}), блок пропускается.")
-            prev_snapshot = load_injuries_snapshot()
-            prev_names = set(prev_snapshot.keys())
 
         # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
