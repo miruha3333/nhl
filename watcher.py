@@ -39,7 +39,7 @@ def main():
         except Exception:
             pass
 
-    # Проверка подписаний
+    # 1. Проверка подписаний (API)
     try:
         resp = requests.get(SIGNINGS_API, headers=headers, timeout=15)
         if resp.status_code == 200:
@@ -57,7 +57,7 @@ def main():
     except Exception as e:
         print(f"Ошибка проверки подписаний: {e}")
 
-    # Проверка трейдов
+    # 2. Проверка трейдов (API)
     if not changes_detected:
         try:
             resp = requests.get(TRADES_API, headers=headers, timeout=15)
@@ -76,8 +76,15 @@ def main():
         except Exception as e:
             print(f"Ошибка проверки трейдов: {e}")
 
+    # 3. Принудительный запуск, если отсутствуют файлы кэша
     if not changes_detected and not os.path.exists(CACHE_FILE):
         print("📦 Кэш отсутствует, требуется запуск.")
+        changes_detected = True
+
+    # 4. Если подписи/трейды молчат, но мы хотим периодически проверять динамические таблицы (Травмы/Уэйвер)
+    # Запускаем основной парсер без лишних условий
+    if not changes_detected:
+        print("ℹ️ В контрактах/трейдах тишина, но запускаем проверку для травм и уэйверов.")
         changes_detected = True
 
     if changes_detected:
