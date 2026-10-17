@@ -655,4 +655,4 @@ def index():
 
 
 if __name__ == '__main__':
-    run_parser()
+    asyncio.run(run_parser_logic())
