@@ -442,26 +442,54 @@ async def run_parser_logic():
             prev_names = set(prev_snapshot.keys())
             recovered = prev_names - current_injury_names_all
 
-        # --- УЭЙВЕР ---
+       # --- УЭЙВЕР ---
         print("Открываем страницу уэйвера...")
         await page.goto("https://puckpedia.com/waiver-wire", wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
+        
+        # Обновленный словарь статусов
+        WAIVER_MAPPING = {
+            "cleared": "прошел драфт отказов",
+            "claimed": "забран с драфта отказов",
+            "placed": "выставлен на драфт отказов",
+            "on waivers": "выставлен на драфт отказов"
+        }
+
         rows = await page.query_selector_all("tr")
         count = 0
+        from datetime import datetime
+
         for row in rows:
             cells = await row.query_selector_all("td")
             if len(cells) >= 3:
-                name = format_name((await cells[0].inner_text()).strip())
+                raw_name = format_name((await cells[0].inner_text()).strip())
                 team_full = (await cells[1].inner_text()).strip().lower().replace(" ", "-")
                 team_abbr = get_team_abbr_by_slug(team_full)
                 res = (await cells[2].inner_text()).strip().lower()
-                waiver_text = WAIVER_MAPPING.get(res, res)
-                emoji = "⬆️" if res == "claimed" else ("⬅️" if res == "cleared" else "➡️")
-                line = f"{emoji} {name} ({team_abbr}) {waiver_text}"
+                
+                # Получаем и форматируем дату (если дата есть в 4-й ячейке, иначе берем текущую)
+                date_str = ""
+                if len(cells) >= 4:
+                    raw_date = (await cells[3].inner_text()).strip()
+                    try:
+                        # Попытка распарсить стандартный формат даты PuckPedia
+                        parsed_date = datetime.strptime(raw_date, "%b %d, %Y")
+                        date_str = parsed_date.strftime("%d.%m.%Y")
+                    except Exception:
+                        date_str = raw_date
+                
+                if not date_str:
+                    date_str = datetime.now().strftime("%d.%m.%Y")
+
+                waiver_text = WAIVER_MAPPING.get(res, "выставлен на драфт отказов" if "placed" in res or "waiver" in res else res)
+                emoji = "⬆️" if res == "claimed" else ("⬅️" if res == "cleared" else "📋")
+                
+                # Формируем итоговую строку с жирным именем и новой датой
+                line = f"{emoji} **{raw_name}** ({team_abbr}) — {date_str} — {waiver_text}"
                 current_waivers.append(line)
                 print(f"  Уэйвер: {line}")
                 count += 1
-                if count >= 3:
+                if count >= 10:  # Проверяем последние 10 записей
                     break
 
         await browser.close()
