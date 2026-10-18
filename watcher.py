@@ -1,13 +1,14 @@
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
 
 CACHE_FILE = "last_data_cache.json"
 INJURIES_SNAPSHOT_FILE = "injuries_snapshot.json"
 
 SIGNINGS_API = "https://puckpedia.com/data/api_signings?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A100%2C%22api_url%22%3A%22%2Fdata%2Fapi_signings%22%2C%22url%22%3A%22signings%22%2C%22defaultSort%22%3A%22sign_date%22%2C%22sortBy%22%3A%22sign_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
 TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A40%2C%22api_url%22%3A%22%2Fdata%2Fapi_trades%22%2C%22url%22%3A%22trades%22%2C%22defaultSort%22%3A%22trade_date%22%2C%22sortBy%22%3A%22trade_date%22%2C%22sortDirection%22%3A%22DESC%22%2C%22sortBySecondary%22%3A%22%22%2C%22sortDirectionSecondary%22%3A%22%22%7D"
+WAIVERS_API = "https://puckpedia.com/data/api_waivers?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A20%2C%22api_url%22%3A%22%2Fdata%2Fapi_waivers%22%2C%22url%22%3A%22waiver-wire%22%7D"
+INJURIES_API = "https://puckpedia.com/data/api_injuries?q=%7B%22curPage%22%3A1%2C%22pageSize%22%3A30%2C%22api_url%22%3A%22%2Fdata%2Fapi_injuries%22%2C%22url%22%3A%22injuries%22%7D"
 
 def set_github_output(name, value):
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -35,15 +36,21 @@ def extract_list(data):
         pass
     return []
 
+def format_name(n):
+    n = str(n).replace('\n', ' ').strip()
+    if "," in n:
+        parts = n.split(",")
+        return f"{parts[1].strip()} {parts[0].strip()}"
+    return n
+
 def main():
     changes_detected = False
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/json",
+        "Accept": "application/json",
         "X-Requested-With": "XMLHttpRequest"
     }
 
-    # Загружаем кэши безопасно
     cache = {"signings": {"last_date": "", "last_id": ""}, "trades": {"last_date": "", "last_id": ""}, "waivers": {"seen": []}}
     try:
         if os.path.exists(CACHE_FILE):
@@ -97,59 +104,52 @@ def main():
         except Exception as e:
             print(f"Ошибка проверки трейдов: {e}")
 
-    # 3. Проверка Уэйвера (HTML)
+    # 3. Проверка Уэйвера (API)
     if not changes_detected:
         try:
-            resp = requests.get("https://puckpedia.com/waiver-wire", headers=headers, timeout=10)
+            resp = requests.get(WAIVERS_API, headers=headers, timeout=10)
             if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                first_row = soup.find('tr')
-                if first_row:
-                    cells = first_row.find_all('td')
-                    if len(cells) > 0:
-                        player_name = cells[0].text.strip()
-                        seen_waivers = set(cache.get("waivers", {}).get("seen", []))
-                        clean_name = player_name.replace(",", "").strip()
-                        if clean_name and not any(clean_name in seen for seen in seen_waivers):
-                            print(f"🔄 Найден новый игрок на уэйвере: {clean_name}")
-                            changes_detected = True
+                items = extract_list(resp.json())
+                seen_waivers = set(cache.get("waivers", {}).get("seen", []))
+                for item in items[:5]:
+                    p_fn = str(item.get('p_fn', '') or item.get('player_first_name', '')).strip()
+                    p_ln = str(item.get('p_ln', '') or item.get('player_last_name', '')).strip()
+                    player_name = f"{p_fn} {p_ln}".strip() or format_name(item.get('player_name', ''))
+                    if player_name and player_name not in seen_waivers:
+                        print(f"API Waivers: найден новый игрок '{player_name}'")
+                        changes_detected = True
+                        break
+                print(f"API Waivers: прочитано {len(items)} записей")
         except Exception as e:
             print(f"Ошибка проверки уэйвера: {e}")
 
-    # 4. Проверка Травм (HTML)
+    # 4. Проверка Травм (API)
     if not changes_detected:
         try:
-            resp = requests.get("https://puckpedia.com/injuries", headers=headers, timeout=10)
+            resp = requests.get(INJURIES_API, headers=headers, timeout=10)
             if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                player_links = soup.select("a.pp_link[href*='/player/']")
+                items = extract_list(resp.json())
                 known_names = set(injuries_snapshot.keys())
-                
-                for link in player_links[:5]:
-                    raw_name = link.text.strip()
-                    if "," in raw_name:
-                        parts = raw_name.split(",")
-                        formatted_name = f"{parts[1].strip()} {parts[0].strip()}"
-                    else:
-                        formatted_name = raw_name
-                        
-                    if formatted_name and formatted_name not in known_names:
-                        print(f"🔄 Найдена новая травма: {formatted_name}")
+                for item in items[:10]:
+                    p_fn = str(item.get('p_fn', '') or item.get('player_first_name', '')).strip()
+                    p_ln = str(item.get('p_ln', '') or item.get('player_last_name', '')).strip()
+                    player_name = f"{p_fn} {p_ln}".strip() or format_name(item.get('player_name', ''))
+                    if player_name and player_name not in known_names:
+                        print(f"API Injuries: найдена новая травма '{player_name}'")
                         changes_detected = True
                         break
+                print(f"API Injuries: прочитано {len(items)} записей")
         except Exception as e:
             print(f"Ошибка проверки травм: {e}")
 
-    # Принудительный запуск, если файлов кэша нет совсем
     if not changes_detected and not os.path.exists(CACHE_FILE):
         print("📦 Кэш отсутствует, требуется первичный запуск.")
         changes_detected = True
 
-    # Финальный вердикт
     if changes_detected:
         set_github_output("changes", "true")
     else:
-        print("💤 Изменений ни в одном из разделов нет.")
+        print("💤 Изменений ни в одном из 4 разделов нет.")
         set_github_output("changes", "false")
 
 if __name__ == "__main__":
