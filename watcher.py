@@ -12,21 +12,27 @@ TRADES_API = "https://puckpedia.com/data/api_trades?q=%7B%22curPage%22%3A1%2C%22
 def set_github_output(name, value):
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
-        with open(github_output, "a", encoding="utf-8") as f:
-            f.write(f"{name}={value}\n")
+        try:
+            with open(github_output, "a", encoding="utf-8") as f:
+                f.write(f"{name}={value}\n")
+        except Exception:
+            pass
     print(f"Output {name}={value}")
 
 def extract_list(data):
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        inner = data.get('data', data)
-        if isinstance(inner, list):
-            return inner
-        if isinstance(inner, dict):
-            for key in ('p', 'rows', 'results', 'items', 'data'):
-                if key in inner and isinstance(inner[key], list):
-                    return inner[key]
+    try:
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            inner = data.get('data', data)
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict):
+                for key in ('p', 'rows', 'results', 'items', 'data'):
+                    if key in inner and isinstance(inner[key], list):
+                        return inner[key]
+    except Exception:
+        pass
     return []
 
 def main():
@@ -37,22 +43,22 @@ def main():
         "X-Requested-With": "XMLHttpRequest"
     }
 
-    # Загружаем кэши
+    # Загружаем кэши безопасно
     cache = {"signings": {"last_date": "", "last_id": ""}, "trades": {"last_date": "", "last_id": ""}, "waivers": {"seen": []}}
-    if os.path.exists(CACHE_FILE):
-        try:
+    try:
+        if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 cache = json.load(f)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     injuries_snapshot = {}
-    if os.path.exists(INJURIES_SNAPSHOT_FILE):
-        try:
+    try:
+        if os.path.exists(INJURIES_SNAPSHOT_FILE):
             with open(INJURIES_SNAPSHOT_FILE, "r", encoding="utf-8") as f:
                 injuries_snapshot = json.load(f)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     # 1. Проверка подписаний (API)
     try:
@@ -65,6 +71,7 @@ def main():
                 item_id = str(first.get("cid", "") or first.get("id", "") or "")
                 last_date = cache.get("signings", {}).get("last_date", "")
                 last_id = cache.get("signings", {}).get("last_id", "")
+                print(f"API Signings: сайт '{item_date}' (id: {item_id}), кэш '{last_date}' (id: {last_id})")
                 if item_date > last_date or (item_date == last_date and item_id and item_id != last_id):
                     print("🔄 Найдены новые подписания!")
                     changes_detected = True
@@ -83,6 +90,7 @@ def main():
                     item_id = str(first.get("trade_id", "") or "")
                     last_date = cache.get("trades", {}).get("last_date", "")
                     last_id = cache.get("trades", {}).get("last_id", "")
+                    print(f"API Trades: сайт '{item_date}' (id: {item_id}), кэш '{last_date}' (id: {last_id})")
                     if item_date > last_date or (item_date == last_date and item_id and item_id != last_id):
                         print("🔄 Найдены новые трейды!")
                         changes_detected = True
@@ -98,10 +106,9 @@ def main():
                 first_row = soup.find('tr')
                 if first_row:
                     cells = first_row.find_all('td')
-                    if cells:
+                    if len(cells) > 0:
                         player_name = cells[0].text.strip()
                         seen_waivers = set(cache.get("waivers", {}).get("seen", []))
-                        # Проверяем, есть ли имя верхнего игрока в увиденных
                         clean_name = player_name.replace(",", "").strip()
                         if clean_name and not any(clean_name in seen for seen in seen_waivers):
                             print(f"🔄 Найден новый игрок на уэйвере: {clean_name}")
@@ -118,7 +125,6 @@ def main():
                 player_links = soup.select("a.pp_link[href*='/player/']")
                 known_names = set(injuries_snapshot.keys())
                 
-                # Проверяем первых 5 игроков из таблицы
                 for link in player_links[:5]:
                     raw_name = link.text.strip()
                     if "," in raw_name:
@@ -143,7 +149,7 @@ def main():
     if changes_detected:
         set_github_output("changes", "true")
     else:
-        print("💤 Изменений ни в одном из 4 разделов нет. Пропуск запуска Sportac.py.")
+        print("💤 Изменений ни в одном из разделов нет.")
         set_github_output("changes", "false")
 
 if __name__ == "__main__":
